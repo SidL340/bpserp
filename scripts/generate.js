@@ -21,6 +21,16 @@ try {
   console.log(`Generating Prisma Client (provider: ${targetProvider})...`);
   execSync('npx --package=prisma prisma generate', { stdio: 'inherit', env: process.env });
   console.log('Prisma Client generated successfully.');
+
+  if (isPostgres) {
+    console.log('Synchronizing schema with PostgreSQL database...');
+    try {
+      execSync('npx --package=prisma prisma db push --skip-generate --accept-data-loss', { stdio: 'inherit', env: process.env });
+      console.log('PostgreSQL database tables synchronized successfully.');
+    } catch (pushErr) {
+      console.warn('Notice: db push skipped or failed during build (will retry at runtime):', pushErr.message);
+    }
+  }
 } catch (err) {
   console.error('Error generating Prisma client:', err.message);
   process.exit(1);
