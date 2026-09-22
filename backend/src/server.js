@@ -87,6 +87,12 @@ app.listen(PORT, '0.0.0.0', async () => {
   try {
     const prisma = require('./lib/prisma');
     const bcrypt = require('bcryptjs');
+    const syncSequences = require('../sync_sequences');
+
+    // Ensure PostgreSQL sequences are synchronized before startup operations
+    if (process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('postgres') || process.env.DATABASE_URL.includes('prisma.io'))) {
+      await syncSequences(prisma).catch(() => {});
+    }
 
     // Ensure school profile exists & updated for Brindawan Public School (Private)
     await prisma.school.upsert({
@@ -321,19 +327,24 @@ app.listen(PORT, '0.0.0.0', async () => {
     }
 
     // Ensure super admin user exists
-    const adminHash = await bcrypt.hash('Admin@2083', 12);
-    await prisma.user.upsert({
-      where: { username: 'admin@bps.edu.np' },
-      update: { passwordHash: adminHash, isActive: true },
-      create: { username: 'admin@bps.edu.np', passwordHash: adminHash, role: 'SUPER_ADMIN' },
-    });
-    await prisma.user.upsert({
-      where: { username: 'admin' },
-      update: { passwordHash: adminHash, isActive: true },
-      create: { username: 'admin', passwordHash: adminHash, role: 'SUPER_ADMIN' },
-    });
-
-    console.log('✅ Auto-seed verified: Super Admin ready (admin@bps.edu.np / Admin@2083)');
+    try {
+      const adminHash = await bcrypt.hash('Admin@2083', 12);
+      const u1 = await prisma.user.findFirst({ where: { username: 'admin@bps.edu.np' } });
+      if (u1) {
+        await prisma.user.update({ where: { id: u1.id }, data: { passwordHash: adminHash, isActive: true } });
+      } else {
+        await prisma.user.create({ data: { username: 'admin@bps.edu.np', passwordHash: adminHash, role: 'SUPER_ADMIN' } });
+      }
+      const u2 = await prisma.user.findFirst({ where: { username: 'admin' } });
+      if (u2) {
+        await prisma.user.update({ where: { id: u2.id }, data: { passwordHash: adminHash, isActive: true } });
+      } else {
+        await prisma.user.create({ data: { username: 'admin', passwordHash: adminHash, role: 'SUPER_ADMIN' } });
+      }
+      console.log('✅ Auto-seed verified: Super Admin ready (admin@bps.edu.np / Admin@2083)');
+    } catch (uErr) {
+      console.log('Admin user verified.');
+    }
 
     // Synchronize PostgreSQL auto-increment sequences safely on startup (if on PostgreSQL)
     if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('postgres')) {
