@@ -1,9 +1,24 @@
 const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'file:./prisma/dev.db';
+const dbUrl = process.env.DATABASE_URL || 'file:./prisma/dev.db';
+const isPostgres = dbUrl.startsWith('postgres://') || dbUrl.startsWith('postgresql://');
+const targetProvider = isPostgres ? 'postgresql' : 'sqlite';
+
+const schemaPath = path.resolve(__dirname, '../backend/prisma/schema.prisma');
+if (fs.existsSync(schemaPath)) {
+  let schema = fs.readFileSync(schemaPath, 'utf8');
+  const currentProviderMatch = schema.match(/datasource\s+db\s*\{[\s\S]*?provider\s*=\s*"(sqlite|postgresql)"/);
+  if (currentProviderMatch && !currentProviderMatch[0].includes(`"${targetProvider}"`)) {
+    console.log(`Switching Prisma schema provider to ${targetProvider}...`);
+    schema = schema.replace(/(datasource\s+db\s*\{[\s\S]*?provider\s*=\s*)"(sqlite|postgresql)"/, `$1"${targetProvider}"`);
+    fs.writeFileSync(schemaPath, schema, 'utf8');
+  }
+}
 
 try {
-  console.log('Generating Prisma Client...');
+  console.log(`Generating Prisma Client (provider: ${targetProvider})...`);
   execSync('npx --package=prisma prisma generate', { stdio: 'inherit', env: process.env });
   console.log('Prisma Client generated successfully.');
 } catch (err) {
