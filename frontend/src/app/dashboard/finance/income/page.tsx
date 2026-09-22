@@ -1,0 +1,1980 @@
+'use client';
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { todayBS, resolveFinancialYear, getFiscalYearFromBS, formatDateInput } from '@/lib/nepali-date';
+import {
+  TrendingUp,
+  Plus,
+  Filter,
+  Search,
+  Building,
+  Landmark,
+  FileSpreadsheet,
+  X,
+  Calendar,
+  Wallet,
+  QrCode,
+  CreditCard,
+  Receipt,
+  CheckCircle2,
+  Users,
+  Eye,
+  Layers,
+  Edit2,
+  Trash2,
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
+
+export default function IncomePage() {
+  const queryClient = useQueryClient();
+  const [sourceLevel, setSourceLevel] = useState('');
+  const [selectedHeadFilter, setSelectedHeadFilter] = useState('');
+  const [selectedPartyFilter, setSelectedPartyFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedYearFilter, setSelectedYearFilter] = useState<string>('ACTIVE');
+
+  // Modals
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddHeadModalOpen, setIsAddHeadModalOpen] = useState(false);
+  const [isAddPartyModalOpen, setIsAddPartyModalOpen] = useState(false);
+
+  // Form State
+  const [incomeFormYearId, setIncomeFormYearId] = useState<string>('');
+  const [addReceivedDateBs, setAddReceivedDateBs] = useState<string>(todayBS());
+  const [paymentMedium, setPaymentMedium] = useState('CASH');
+  const [selectedPartyId, setSelectedPartyId] = useState('');
+  const [selectedBankAcc, setSelectedBankAcc] = useState('');
+
+  // Continuous Entry States for Add Income Modal
+  const [addIncomeHeadId, setAddIncomeHeadId] = useState('');
+  const [addIncomeAmount, setAddIncomeAmount] = useState('');
+  const [addIncomeSourceOrg, setAddIncomeSourceOrg] = useState('');
+  const [addIncomeVoucherNo, setAddIncomeVoucherNo] = useState('');
+  const [addIncomeChequeNo, setAddIncomeChequeNo] = useState('');
+  const [addIncomeRemarks, setAddIncomeRemarks] = useState('');
+
+  // Split Income Payment State
+  const [isAddIncomeSplit, setIsAddIncomeSplit] = useState(false);
+  const [addIncomeSplitCashAmount, setAddIncomeSplitCashAmount] = useState('');
+  const [addIncomeSplitBankAmount, setAddIncomeSplitBankAmount] = useState('');
+  const [addIncomeSplitBankAccountId, setAddIncomeSplitBankAccountId] = useState('');
+  const [addIncomeSplitChequeNo, setAddIncomeSplitChequeNo] = useState('');
+
+  // Inline Income Head Modal State
+  const [newHeadCode, setNewHeadCode] = useState('');
+  const [newHeadCategoryId, setNewHeadCategoryId] = useState('');
+  const [newHeadName, setNewHeadName] = useState('');
+  const [newHeadNameNepali, setNewHeadNameNepali] = useState('');
+
+  // Bulk/Legacy Fee Collection Modal State & Multi-Topic
+  const [isLegacyFeeModalOpen, setIsLegacyFeeModalOpen] = useState(false);
+  const [legacyFeeClassName, setLegacyFeeClassName] = useState('');
+  const [legacyFeeStudentCount, setLegacyFeeStudentCount] = useState('');
+  const [legacyFeeAmount, setLegacyFeeAmount] = useState('');
+  const [legacyFeeDate, setLegacyFeeDate] = useState(todayBS());
+  const [legacyFeeRemarks, setLegacyFeeRemarks] = useState('');
+  const [legacyFeePaymentMethod, setLegacyFeePaymentMethod] = useState('CASH');
+  const [legacyFeeHeadId, setLegacyFeeHeadId] = useState('');
+  const [legacyFeeTopicMode, setLegacyFeeTopicMode] = useState<'SINGLE' | 'MULTI'>('SINGLE');
+  const [legacyFeeTopics, setLegacyFeeTopics] = useState<Array<{ headId: string; amount: string }>>([
+    { headId: '', amount: '' }
+  ]);
+  const [isLegacyFeeSplit, setIsLegacyFeeSplit] = useState(false);
+  const [legacyFeeSplitCashAmount, setLegacyFeeSplitCashAmount] = useState('');
+  const [legacyFeeSplitBankAmount, setLegacyFeeSplitBankAmount] = useState('');
+  const [legacyFeeSplitBankAccountId, setLegacyFeeSplitBankAccountId] = useState('');
+  const [legacyFeeSplitChequeNo, setLegacyFeeSplitChequeNo] = useState('');
+
+  // Inline Party Modal State
+  const [newPartyName, setNewPartyName] = useState('');
+  const [newPartyNameNepali, setNewPartyNameNepali] = useState('');
+  const [newPartyType, setNewPartyType] = useState('DONOR');
+  const [customPartyType, setCustomPartyType] = useState('');
+  const [newPartyPan, setNewPartyPan] = useState('');
+  const [newPartyPhone, setNewPartyPhone] = useState('');
+
+  // ── 1. QUERIES ──────────────────────────────────────────────────────────────
+  const { data: yearsData } = useQuery({
+    queryKey: ['academic-years'],
+    queryFn: async () => {
+      const res = await api.get('/classes/academic-years/all');
+      return res.data?.data || [];
+    },
+  });
+  const activeYear = yearsData?.find((y: any) => y.isActive) || yearsData?.[0];
+
+  // Financial Years (साउन–असार)
+  const { data: financialYearsData } = useQuery({
+    queryKey: ['financial-years-all'],
+    queryFn: async () => {
+      const res = await api.get('/financial-years/all');
+      return res.data?.data || [];
+    },
+  });
+  const activeFinancialYear = financialYearsData?.find((f: any) => f.isActive) || financialYearsData?.[0];
+  const autoResolvedFY = resolveFinancialYear(addReceivedDateBs, financialYearsData || []);
+
+  // Resolve current filtered financial year ID
+  const effectiveFYId = selectedYearFilter === 'ALL'
+    ? ''
+    : selectedYearFilter === 'ACTIVE'
+    ? (activeFinancialYear?.id ? String(activeFinancialYear.id) : '')
+    : selectedYearFilter;
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ['income-categories'],
+    queryFn: async () => {
+      const res = await api.get('/income/categories');
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: headsData } = useQuery({
+    queryKey: ['income-heads'],
+    queryFn: async () => {
+      const res = await api.get('/income/heads');
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: partiesData } = useQuery({
+    queryKey: ['parties-list-income'],
+    queryFn: async () => {
+      const res = await api.get('/parties');
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: bankAccountsData } = useQuery({
+    queryKey: ['bank-accounts-income'],
+    queryFn: async () => {
+      const res = await api.get('/school/bank-accounts');
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: entriesData, isLoading } = useQuery({
+    queryKey: ['income-entries', sourceLevel, selectedHeadFilter, selectedPartyFilter, searchQuery, effectiveFYId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (sourceLevel) params.append('sourceLevel', sourceLevel);
+      if (selectedHeadFilter) params.append('headId', selectedHeadFilter);
+      if (selectedPartyFilter) params.append('partyId', selectedPartyFilter);
+      if (searchQuery) params.append('q', searchQuery);
+      if (effectiveFYId) params.append('financialYearId', effectiveFYId);
+      const res = await api.get(`/income/entries?${params.toString()}`);
+      return res.data;
+    },
+  });
+
+  const { data: feeCollectionsData } = useQuery({
+    queryKey: ['fee-collections-sum'],
+    queryFn: async () => {
+      const res = await api.get('/income/fee-collections?limit=1');
+      return res.data;
+    },
+  });
+
+  // ── 2. MUTATIONS ────────────────────────────────────────────────────────────
+  const createIncomeHeadMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post('/income/heads', payload);
+      return res.data;
+    },
+    onSuccess: (res: any) => {
+      toast.success('New Income Topic created!');
+      queryClient.invalidateQueries({ queryKey: ['income-heads'] });
+      if (res?.data?.id) {
+        setAddIncomeHeadId(res.data.id.toString());
+      }
+      setIsAddHeadModalOpen(false);
+      setNewHeadCode('');
+      setNewHeadCategoryId('');
+      setNewHeadName('');
+      setNewHeadNameNepali('');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to create income topic.');
+    },
+  });
+
+  const createPartyMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post('/parties', payload);
+      return res.data;
+    },
+    onSuccess: (res: any) => {
+      toast.success('New Party/Donor saved!');
+      queryClient.invalidateQueries({ queryKey: ['parties-list-income'] });
+      if (res?.data?.id) setSelectedPartyId(res.data.id.toString());
+      setIsAddPartyModalOpen(false);
+      setNewPartyName('');
+      setNewPartyNameNepali('');
+      setNewPartyPan('');
+      setNewPartyPhone('');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to create party.');
+    },
+  });
+
+  const addLegacyFeeMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post('/income/entries', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('Legacy/Bulk fee collection recorded as Income Entry!');
+      queryClient.invalidateQueries({ queryKey: ['income-entries'] });
+      setIsLegacyFeeModalOpen(false);
+      setLegacyFeeClassName('');
+      setLegacyFeeStudentCount('');
+      setLegacyFeeAmount('');
+      setLegacyFeeRemarks('');
+      setLegacyFeePaymentMethod('CASH');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to record legacy fee collection.');
+    },
+  });
+
+
+  const addIncomeMutation = useMutation({
+    mutationFn: async (formData: any) => {
+      const res = await api.post('/income/entries', {
+        ...formData,
+        academicYearId: activeYear?.id || 1,
+        financialYearId: incomeFormYearId ? parseInt(incomeFormYearId) : (autoResolvedFY?.id || activeFinancialYear?.id),
+        receivedDateAd: new Date().toISOString().slice(0, 10),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('आम्दानी सुरक्षित भयो! (सोही शीर्षक/दातामा थप प्रविष्टि गर्न सक्नुहुन्छ वा बन्द गर्न Cancel थिच्नुहोस्)');
+      queryClient.invalidateQueries({ queryKey: ['income-entries'] });
+      // Continuous entry: retain Party, Head, Date, FY; reset per-transaction fields
+      setAddIncomeAmount('');
+      setAddIncomeVoucherNo('');
+      setAddIncomeChequeNo('');
+      setAddIncomeRemarks('');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to record income entry.');
+    },
+  });
+
+  // Edit & Delete Income State
+  const [editingIncome, setEditingIncome] = useState<any>(null);
+  const [editAcademicYearId, setEditAcademicYearId] = useState('');
+  const [editHeadId, setEditHeadId] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editReceivedDateBs, setEditReceivedDateBs] = useState('');
+  const [editSourceLevel, setEditSourceLevel] = useState('Central');
+  const [editSourceOrg, setEditSourceOrg] = useState('');
+  const [editPartyId, setEditPartyId] = useState('');
+  const [editDepositedInAccount, setEditDepositedInAccount] = useState('');
+  const [editBankAccountId, setEditBankAccountId] = useState('');
+  const [editReceivedBy, setEditReceivedBy] = useState('');
+  const [editPaymentMedium, setEditPaymentMedium] = useState('CASH');
+  const [editChequeNo, setEditChequeNo] = useState('');
+  const [editVoucherNo, setEditVoucherNo] = useState('');
+  const [editRemarks, setEditRemarks] = useState('');
+
+  const updateIncomeMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await api.put(`/income/entries/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('Income entry updated successfully! (आम्दानी प्रविष्टि अद्यावधिक भयो)');
+      queryClient.invalidateQueries({ queryKey: ['income-entries'] });
+      setEditingIncome(null);
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || 'Failed to update income entry.')
+  });
+
+  const deleteIncomeMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await api.delete(`/income/entries/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('Income entry deleted successfully.');
+      queryClient.invalidateQueries({ queryKey: ['income-entries'] });
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || 'Failed to delete income entry.')
+  });
+
+  const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!addIncomeHeadId) {
+      toast.error('कृपया आम्दानी शीर्षक छनौट गर्नुहोस् (Please select an Income Topic).');
+      return;
+    }
+    if (!addIncomeAmount || parseFloat(addIncomeAmount) <= 0) {
+      toast.error('कृपया मान्य आम्दानी रकम प्रविष्टि गर्नुहोस् (Please enter a valid amount).');
+      return;
+    }
+
+    const totalAmt = parseFloat(addIncomeAmount);
+    const resolvedFYId = incomeFormYearId ? parseInt(incomeFormYearId) : (autoResolvedFY?.id || activeFinancialYear?.id);
+    const targetHeadId = parseInt(addIncomeHeadId);
+    let resolvedSourceOrg: string | undefined = undefined;
+    if (selectedPartyId) {
+      const partyObj = partiesData?.find((p: any) => p.id.toString() === selectedPartyId);
+      if (partyObj) resolvedSourceOrg = partyObj.name;
+    } else if (addIncomeSourceOrg.trim()) {
+      resolvedSourceOrg = addIncomeSourceOrg.trim();
+    }
+
+    if (isAddIncomeSplit) {
+      const cashAmt = parseFloat(addIncomeSplitCashAmount || '0');
+      const bankAmt = parseFloat(addIncomeSplitBankAmount || '0');
+      if (Math.abs((cashAmt + bankAmt) - totalAmt) > 0.01) {
+        toast.error(`मिश्रित आम्दानीको योगफल कुल रकमसँग मिल्नुपर्छ (Cash Rs. ${cashAmt} + Bank Rs. ${bankAmt} != Total Rs. ${totalAmt}).`);
+        return;
+      }
+
+      try {
+        const commonPayload = {
+          headId: targetHeadId,
+          receivedDateBs: addReceivedDateBs || todayBS(),
+          receivedDateAd: new Date().toISOString().slice(0, 10),
+          academicYearId: activeYear?.id || 1,
+          financialYearId: resolvedFYId,
+          sourceLevel: sourceLevel || 'Other',
+          partyId: selectedPartyId ? parseInt(selectedPartyId) : undefined,
+          sourceOrg: resolvedSourceOrg,
+          voucherNo: addIncomeVoucherNo.trim() || undefined,
+        };
+
+        if (cashAmt > 0) {
+          await api.post('/income/entries', {
+            ...commonPayload,
+            amount: cashAmt,
+            paymentMedium: 'CASH',
+            depositedInAccount: 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)',
+            remarks: addIncomeRemarks ? `${addIncomeRemarks.trim()} [Cash Portion 1/2]` : 'Income received in Cash (1/2)',
+          });
+        }
+
+        if (bankAmt > 0) {
+          let depAcc = 'School Operational Account';
+          if (addIncomeSplitBankAccountId) {
+            const bObj = bankAccountsData?.find((b: any) => b.id.toString() === addIncomeSplitBankAccountId);
+            if (bObj) depAcc = `${bObj.bankName} (${bObj.accountNo})`;
+          }
+          await api.post('/income/entries', {
+            ...commonPayload,
+            amount: bankAmt,
+            paymentMedium: 'BANK_TRANSFER',
+            bankAccountId: addIncomeSplitBankAccountId ? parseInt(addIncomeSplitBankAccountId) : undefined,
+            depositedInAccount: depAcc,
+            chequeNo: addIncomeSplitChequeNo.trim() || undefined,
+            remarks: addIncomeRemarks ? `${addIncomeRemarks.trim()} [Bank/Cheque Portion 2/2]` : 'Income received in Bank (2/2)',
+          });
+        }
+
+        toast.success(`मिश्रित आम्दानी प्रविष्टि रू ${totalAmt.toLocaleString()} (नगद + बैंक) सुरक्षित भयो!`);
+        queryClient.invalidateQueries({ queryKey: ['income-entries'] });
+        setAddIncomeAmount('');
+        setAddIncomeSplitCashAmount('');
+        setAddIncomeSplitBankAmount('');
+        setAddIncomeVoucherNo('');
+        setAddIncomeChequeNo('');
+        setAddIncomeRemarks('');
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || 'Failed to record split income.');
+      }
+    } else {
+      const data: any = {
+        headId: targetHeadId,
+        amount: totalAmt,
+        receivedDateBs: addReceivedDateBs || todayBS(),
+        paymentMedium,
+        voucherNo: addIncomeVoucherNo.trim() || null,
+        remarks: addIncomeRemarks.trim() || null,
+      };
+
+      if (sourceLevel) data.sourceLevel = sourceLevel;
+      if (selectedPartyId) {
+        data.partyId = parseInt(selectedPartyId);
+        data.sourceOrg = resolvedSourceOrg;
+      } else if (resolvedSourceOrg) {
+        data.sourceOrg = resolvedSourceOrg;
+      }
+
+      if (paymentMedium === 'CASH') {
+        data.bankAccountId = null;
+        data.depositedInAccount = 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)';
+        data.chequeNo = null;
+        data.chequeDateBs = null;
+      } else if (selectedBankAcc) {
+        const bankObj = bankAccountsData?.find((b: any) => b.id.toString() === selectedBankAcc);
+        if (bankObj) {
+          data.bankAccountId = bankObj.id;
+          data.depositedInAccount = `${bankObj.bankName} (${bankObj.accountNo})`;
+        }
+      } else {
+        data.depositedInAccount = 'Rastriya Banijya Bank Current A/C';
+      }
+
+      if (paymentMedium === 'CHEQUE' || paymentMedium === 'BANK_TRANSFER') {
+        data.chequeNo = addIncomeChequeNo.trim() || null;
+      }
+
+      addIncomeMutation.mutate(data);
+    }
+  };
+
+  const entries = entriesData?.data || [];
+  const directIncomeTotal = entriesData?.totalAmount || 0;
+  const studentFeesTotal = feeCollectionsData?.totalAmount || 0;
+  const grandTotalIncome = directIncomeTotal + studentFeesTotal;
+
+  const govGrants = entries
+    .filter((e: any) => e.head?.category?.type === 'GOVERNMENT_BUDGET' || ['Central', 'Provincial', 'Local'].includes(e.sourceLevel))
+    .reduce((s: number, e: any) => s + (e.amount || 0), 0);
+
+  const ownSourceEntries = entries
+    .filter((e: any) => e.head?.category?.type === 'OWN_SOURCE' || e.sourceLevel === 'District' || e.sourceLevel === 'Other')
+    .reduce((s: number, e: any) => s + (e.amount || 0), 0);
+
+  const totalSelfIncome = ownSourceEntries + studentFeesTotal;
+
+  return (
+    <div className="space-y-6 pb-16">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl md:text-2xl font-extrabold text-[#1e3a5f]">
+            Income & School Revenues (विद्यालय आम्दानी तथा स्रोत)
+          </h1>
+          <p className="text-xs text-gray-500 font-nepali mt-0.5">
+            विद्यार्थी मासिक/भर्ना शुल्क, बाह्य स्रोत (Outsource), लगानी (Investment), र विविध विद्यालय आम्दानीहरू
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setIsAddPartyModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 shadow-2xs transition"
+          >
+            <Users size={14} className="text-emerald-700" />
+            <span>+ Add Party / Donor</span>
+          </button>
+
+          <button
+            onClick={() => setIsLegacyFeeModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 shadow-2xs transition"
+          >
+            <Receipt size={14} className="text-amber-600" />
+            <span>Legacy / Bulk Fee (सामूहिक शुल्क)</span>
+          </button>
+
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 shadow-2xs transition"
+          >
+            <Plus size={14} />
+            <span>Record Income (आम्दानी प्रविष्टि)</span>
+          </button>
+        </div>
+
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-2xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            Total School Income ({selectedYearFilter === 'ALL' ? 'सबै आर्थिक वर्षहरू' : `आ.व. ${financialYearsData?.find((f: any) => f.id.toString() === effectiveFYId)?.year || activeFinancialYear?.year || '२०८३/८४'}`})
+          </span>
+          <p className="text-2xl font-black text-emerald-700 mt-2 font-mono">रू {grandTotalIncome.toLocaleString()}</p>
+          <p className="text-[11px] text-gray-400 mt-1">Student Fees + Investment + Outsource Sources</p>
+        </div>
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-2xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Outsource & Institutional (बाह्य तथा संस्थागत स्रोत)</span>
+          <p className="text-2xl font-black text-[#1e3a5f] mt-2 font-mono">
+            रू {govGrants.toLocaleString()}
+          </p>
+          <p className="text-[11px] text-gray-400 mt-1">Investment, Grants, Sponsor, Capital Fund</p>
+        </div>
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-2xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Student Fees & Collections (विद्यार्थी शुल्क आम्दानी)</span>
+          <p className="text-2xl font-black text-amber-600 mt-2 font-mono">
+            रू {totalSelfIncome.toLocaleString()}
+          </p>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Student Fees (Rs. {studentFeesTotal.toLocaleString()}) + Rent/Lease (Rs. {ownSourceEntries.toLocaleString()})
+          </p>
+        </div>
+      </div>
+
+      {/* Filters & Search Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-2xs">
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto flex-1">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={14} className="absolute left-3 top-3 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search income by source org, voucher, cheque no, received by..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-slate-50/50 pl-9 pr-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-medium"
+            />
+          </div>
+
+          {/* Fiscal Year Filter */}
+          <select
+            value={selectedYearFilter}
+            onChange={(e) => setSelectedYearFilter(e.target.value)}
+            className="rounded-xl border border-emerald-300 bg-emerald-50/70 px-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-bold text-emerald-950 shadow-2xs"
+          >
+            <option value="ACTIVE">चालु आ.व. ({activeFinancialYear?.year || '2083/84'})</option>
+            <option value="ALL">सबै आर्थिक वर्षहरू (All Fiscal Years)</option>
+            {financialYearsData?.map((fy: any) => (
+              <option key={fy.id} value={fy.id.toString()}>
+                आ.व. {fy.year} {fy.isActive ? '(चालु)' : ''}
+              </option>
+            ))}
+          </select>
+
+          {/* Level Filter */}
+          <select
+            value={sourceLevel}
+            onChange={(e) => setSourceLevel(e.target.value)}
+            className="rounded-xl border border-gray-200 bg-slate-50/50 px-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-medium"
+          >
+            <option value="">All Source Levels (सबै निकाय)</option>
+            <option value="Central">Central Govt (सङ्घीय)</option>
+            <option value="Provincial">Provincial Govt (प्रदेश)</option>
+            <option value="Local">Local Govt (स्थानीय)</option>
+            <option value="District">District (जिल्ला)</option>
+            <option value="Other">Own Source (आफ्नै)</option>
+          </select>
+
+          {/* Topic Filter with Code */}
+          <select
+            value={selectedHeadFilter}
+            onChange={(e) => setSelectedHeadFilter(e.target.value)}
+            className="rounded-xl border border-gray-200 bg-slate-50/50 px-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-medium"
+          >
+            <option value="">All Income Topics (सबै आम्दानी शीर्षक)</option>
+            {headsData?.map((h: any) => (
+              <option key={h.id} value={h.id}>
+                {h.code ? `[Code: ${h.code}] ` : ''}{h.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Party Filter */}
+          <select
+            value={selectedPartyFilter}
+            onChange={(e) => setSelectedPartyFilter(e.target.value)}
+            className="rounded-xl border border-gray-200 bg-slate-50/50 px-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-medium"
+          >
+            <option value="">All Parties/Donors (सबै आम्दानी स्रोत पक्ष)</option>
+            {partiesData?.map((p: any) => (
+              <option key={p.id} value={p.id}>
+                {p.name} {p.panNo ? `(PAN: ${p.panNo})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <span className="text-xs font-bold text-gray-500 font-mono">
+          Showing <b>{entries.length}</b> income records
+        </span>
+      </div>
+
+      {/* Income Entries Table */}
+      <div className="rounded-2xl border border-gray-100 bg-white shadow-2xs overflow-hidden">
+        <table className="w-full text-left text-xs font-sans">
+          <thead className="bg-[#1e3a5f] text-white uppercase text-[10.5px] tracking-wider font-extrabold">
+            <tr>
+              <th className="p-3.5">Date (BS)</th>
+              <th className="p-3.5">Source Level</th>
+              <th className="p-3.5">Income Head (Code & Topic)</th>
+              <th className="p-3.5">Source Org / Party</th>
+              <th className="p-3.5">Payment Method & Account</th>
+              <th className="p-3.5 text-right">Amount (रू)</th>
+              <th className="p-3.5 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
+            {isLoading ? (
+              <tr><td colSpan={7} className="p-8 text-center text-gray-400">Loading income entries...</td></tr>
+            ) : entries.length === 0 ? (
+              <tr><td colSpan={7} className="p-8 text-center text-gray-400">No income entries found for selected filter.</td></tr>
+            ) : (
+              entries.map((item: any) => (
+                <tr key={item.id} className="hover:bg-slate-50 transition">
+                  <td className="p-3.5 font-mono font-bold text-gray-900">
+                    <div>{item.receivedDateBs}</div>
+                    <span className="inline-block text-[10px] font-sans font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 mt-0.5">
+                      आ.व. {item.financialYear?.year || getFiscalYearFromBS(item.receivedDateBs)}
+                    </span>
+                  </td>
+                  <td className="p-3.5">
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-[#1e3a5f] border border-slate-200">
+                      {item.sourceLevel || 'Central'}
+                    </span>
+                  </td>
+                  <td className="p-3.5">
+                    <div className="flex items-center gap-1">
+                      {item.head?.code && (
+                        <span className="rounded bg-emerald-100 text-emerald-900 px-1.5 py-0.5 text-[10px] font-black font-mono">
+                          {item.head.code}
+                        </span>
+                      )}
+                      <p className="font-bold text-gray-900">{item.head?.name}</p>
+                    </div>
+                    <p className="text-[10px] text-gray-500 font-nepali mt-0.5">{item.head?.category?.name}</p>
+                  </td>
+                  <td className="p-3.5">
+                    <p className="font-bold text-emerald-800">{item.party?.name || item.sourceOrg || '—'}</p>
+                    <p className="text-[10px] text-gray-500 font-mono">Rec By: {item.receivedBy || 'School Office'}</p>
+                  </td>
+                  <td className="p-3.5">
+                    <div className="flex items-center gap-1">
+                      <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200">
+                        {item.paymentMedium || 'CASH'}
+                      </span>
+                      {item.chequeNo && (
+                        <span className="font-mono text-[10px] font-bold text-purple-900">
+                          Chk: {item.chequeNo}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-gray-500 block truncate max-w-xs mt-0.5">
+                      {item.depositedInAccount || 'School Main Account'}
+                    </span>
+                  </td>
+                  <td className="p-3.5 text-right font-mono font-black text-emerald-700 text-sm whitespace-nowrap">
+                    रू {item.amount?.toLocaleString()}
+                  </td>
+                  <td className="p-3.5 text-center">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          setEditingIncome(item);
+                          setEditAcademicYearId(item.academicYearId?.toString() || '');
+                          setEditHeadId(item.headId?.toString() || '');
+                          setEditAmount(item.amount?.toString() || '');
+                          setEditReceivedDateBs(item.receivedDateBs || todayBS());
+                          setEditSourceLevel(item.sourceLevel || 'Central');
+                          setEditSourceOrg(item.sourceOrg || '');
+                          setEditPartyId(item.partyId?.toString() || '');
+                          setEditDepositedInAccount(item.depositedInAccount || 'School Main Account');
+                          setEditReceivedBy(item.receivedBy || '');
+                          setEditPaymentMedium(item.paymentMedium || 'CASH');
+                          setEditChequeNo(item.chequeNo || '');
+                          setEditVoucherNo(item.voucherNo || '');
+                          setEditRemarks(item.remarks || '');
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 text-[11px] font-bold shadow-2xs transition"
+                        title="Edit Income Entry"
+                      >
+                        <Edit2 size={12} />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to delete this income entry?')) {
+                            deleteIncomeMutation.mutate(item.id);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 text-[11px] font-bold shadow-2xs transition"
+                        title="Delete Income Entry"
+                      >
+                        <Trash2 size={12} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add Income Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-extrabold text-[#1e3a5f] flex items-center gap-2">
+                    <TrendingUp size={18} className="text-emerald-600" />
+                    <span>Record Income Entry (आम्दानी प्रविष्टि)</span>
+                  </h3>
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    🔄 लगातार प्रविष्टि (Continuous Entry Mode)
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  आम्दानी शीर्षक र दाता छनौट गरेपछि सोही रहन्छ — बन्द गर्न Cancel वा X थिच्नुहोस्
+                </p>
+              </div>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSubmit} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-gray-700">आर्थिक वर्ष (Fiscal Year) *</label>
+                    {autoResolvedFY && (
+                      <span className="text-[9.5px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                        स्वतः: {autoResolvedFY.year}
+                      </span>
+                    )}
+                  </div>
+                  <select
+                    value={incomeFormYearId || autoResolvedFY?.id || activeFinancialYear?.id || ''}
+                    onChange={(e) => setIncomeFormYearId(e.target.value)}
+                    className="erp-input font-bold text-[#1e3a5f]"
+                    required
+                  >
+                    {financialYearsData?.map((y: any) => (
+                      <option key={y.id} value={y.id}>
+                        आ.व. {y.year} {y.isActive ? '(चालु आ.व.)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Source Level *</label>
+                  <select
+                    value={sourceLevel || 'Central'}
+                    onChange={(e) => setSourceLevel(e.target.value)}
+                    className="erp-input font-bold"
+                    required
+                  >
+                    <option value="Central">Central Govt (सङ्घीय सरकार)</option>
+                    <option value="Provincial">Provincial Govt (प्रदेश सरकार)</option>
+                    <option value="Local">Local Govt (स्थानीय पालिका)</option>
+                    <option value="District">District / EDC (जिल्ला)</option>
+                    <option value="Other">School Own Source (आफ्नै स्रोत)</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-gray-700">Income Head / Topic *</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddHeadModalOpen(true)}
+                      className="text-[10px] font-extrabold text-emerald-700 hover:underline flex items-center gap-0.5"
+                    >
+                      <Plus size={11} />
+                      <span>+ Add Topic</span>
+                    </button>
+                  </div>
+                  <SearchableSelect
+                    placeholder="-- Select Income Topic --"
+                    value={addIncomeHeadId}
+                    onChange={(val) => setAddIncomeHeadId(val)}
+                    required
+                    options={(headsData || []).map((h: any) => ({
+                      value: h.id.toString(),
+                      label: h.name,
+                      sublabel: h.nameNepali || h.category?.name,
+                      code: h.code,
+                    }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Amount in रू (आम्दानी रकम) *</label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    placeholder="e.g. 500000"
+                    value={addIncomeAmount}
+                    onChange={(e) => setAddIncomeAmount(e.target.value)}
+                    className="erp-input font-mono font-bold text-emerald-700 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Received Date in BS *</label>
+                  <input
+                    required
+                    type="text"
+                    value={addReceivedDateBs}
+                    onChange={(e) => setAddReceivedDateBs(formatDateInput(e.target.value))}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-gray-700">Source Org / Party</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddPartyModalOpen(true)}
+                      className="text-[10px] font-extrabold text-emerald-700 hover:underline flex items-center gap-0.5"
+                    >
+                      <Plus size={11} />
+                      <span>+ Add Party</span>
+                    </button>
+                  </div>
+                  <SearchableSelect
+                    placeholder="-- Select Saved Party / Donor --"
+                    value={selectedPartyId}
+                    onChange={(val) => setSelectedPartyId(val)}
+                    options={(partiesData || []).map((p: any) => ({
+                      value: p.id.toString(),
+                      label: p.name,
+                      sublabel: p.nameNepali || p.partyType,
+                    }))}
+                  />
+                  {!selectedPartyId && (
+                    <input
+                      type="text"
+                      placeholder="Or type organization name..."
+                      value={addIncomeSourceOrg}
+                      onChange={(e) => setAddIncomeSourceOrg(e.target.value)}
+                      className="erp-input mt-1"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Payment Method</label>
+                  <select
+                    value={paymentMedium}
+                    onChange={(e) => setPaymentMedium(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="BANK_TRANSFER">BANK TRANSFER (बैंक ट्रान्सफर)</option>
+                    <option value="CHEQUE">CHEQUE (चेक)</option>
+                    <option value="CASH">CASH (नगद)</option>
+                    <option value="QR_CODE">QR CODE (क्युआर)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Split Mode Toggle */}
+              <div className="flex items-center gap-2 p-2.5 bg-slate-100 rounded-xl border border-slate-200">
+                <input
+                  type="checkbox"
+                  id="addIncomeSplitToggle"
+                  checked={isAddIncomeSplit}
+                  onChange={(e) => {
+                    setIsAddIncomeSplit(e.target.checked);
+                    if (e.target.checked && addIncomeAmount) {
+                      const half = (parseFloat(addIncomeAmount) / 2).toFixed(2);
+                      setAddIncomeSplitCashAmount(half);
+                      setAddIncomeSplitBankAmount((parseFloat(addIncomeAmount) - parseFloat(half)).toFixed(2));
+                    }
+                  }}
+                  className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor="addIncomeSplitToggle" className="text-xs font-bold text-gray-800 cursor-pointer">
+                  मिश्रित आम्दानी भुक्तानी (Split Payment: केही नगद + केही बैंक/चेक)
+                </label>
+              </div>
+
+              {isAddIncomeSplit ? (
+                <div className="space-y-3 bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200">
+                  <div className="font-extrabold text-emerald-950 text-[11px] uppercase">
+                    Split Breakdown (नगद तथा बैंक रकम विभाजन):
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        💵 नगद आम्दानी रकम (Cash Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={addIncomeSplitCashAmount}
+                        onChange={(e) => setAddIncomeSplitCashAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-emerald-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        🏦 बैंक/चेक आम्दानी रकम (Bank Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={addIncomeSplitBankAmount}
+                        onChange={(e) => setAddIncomeSplitBankAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-blue-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        Deposited Bank Account *
+                      </label>
+                      <select
+                        value={addIncomeSplitBankAccountId}
+                        onChange={(e) => setAddIncomeSplitBankAccountId(e.target.value)}
+                        className="erp-input font-bold"
+                        required={parseFloat(addIncomeSplitBankAmount || '0') > 0}
+                      >
+                        <option value="">-- Select Bank Account --</option>
+                        {bankAccountsData?.map((b: any) => (
+                          <option key={b.id} value={b.id}>
+                            {b.bankName} - {b.accountNo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        Cheque / Ref No (चेक/भौचर नं.)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. CHQ-882109"
+                        value={addIncomeSplitChequeNo}
+                        onChange={(e) => setAddIncomeSplitChequeNo(e.target.value)}
+                        className="erp-input font-mono font-bold text-blue-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-bold text-emerald-950 bg-white p-2 rounded-lg border border-emerald-200 flex justify-between font-mono">
+                    <span>कुल जोड (Total): रू {((parseFloat(addIncomeSplitCashAmount || '0') + parseFloat(addIncomeSplitBankAmount || '0'))).toLocaleString()}</span>
+                    <span>कुल आम्दानी (Target): रू {(parseFloat(addIncomeAmount || '0')).toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {(paymentMedium === 'CHEQUE' || paymentMedium === 'BANK_TRANSFER') && (
+                    <div className="grid grid-cols-2 gap-3 bg-emerald-50/70 p-3 rounded-xl border border-emerald-200">
+                      <div>
+                        <label className="block font-bold text-emerald-950 mb-1">Cheque / Trans Ref No.</label>
+                        <input
+                          type="text"
+                          placeholder="CHQ-123456"
+                          value={addIncomeChequeNo}
+                          onChange={(e) => setAddIncomeChequeNo(e.target.value)}
+                          className="erp-input font-mono font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-bold text-emerald-950 mb-1">Voucher No. (भौचर नं)</label>
+                        <input
+                          type="text"
+                          placeholder="VOUCH-2083-001"
+                          value={addIncomeVoucherNo}
+                          onChange={(e) => setAddIncomeVoucherNo(e.target.value)}
+                          className="erp-input font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Deposited In Account</label>
+                      {paymentMedium === 'CASH' ? (
+                        <div className="p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-xs font-bold text-emerald-950 flex items-center gap-2">
+                          <span>💵</span>
+                          <span>विद्यालय नगद खाता (School Cash / Petty Cash A/c)</span>
+                        </div>
+                      ) : (
+                        <>
+                          <SearchableSelect
+                            placeholder="-- Select Bank Account --"
+                            value={selectedBankAcc}
+                            onChange={(val) => setSelectedBankAcc(val)}
+                            options={(bankAccountsData || []).map((b: any) => ({
+                              value: b.id.toString(),
+                              label: `${b.bankName} - ${b.accountName}`,
+                              sublabel: `Acc: ${b.accountNo}`,
+                            }))}
+                          />
+                          {!selectedBankAcc && (
+                            <div className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/60 text-xs text-blue-900 font-medium mt-1">
+                              Rastriya Banijya Bank Current A/C
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Voucher No (भौचर नं - ऐच्छिक)</label>
+                      <input
+                        type="text"
+                        placeholder="VOUCH-001"
+                        value={addIncomeVoucherNo}
+                        onChange={(e) => setAddIncomeVoucherNo(e.target.value)}
+                        className="erp-input font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Remarks (कैफियत)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Any extra notes..."
+                    value={addIncomeRemarks}
+                    onChange={(e) => setAddIncomeRemarks(e.target.value)}
+                    className="erp-input"
+                  />
+                </div>
+
+              <div className="flex items-center justify-between border-t border-gray-100 pt-3">
+                <span className="text-[11px] text-gray-500 font-medium">
+                  💡 सेभ गरेपछि सोही शीर्षक/दाता यथावत रहन्छ। बन्द गर्न <strong>Cancel</strong> थिच्नुहोस्।
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="px-4 py-2 border rounded-xl font-bold text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel / बन्द गर्नुहोस्
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addIncomeMutation.isPending}
+                    className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-xs hover:bg-emerald-700"
+                  >
+                    {addIncomeMutation.isPending ? 'Saving...' : 'Save Income Entry (सेभ गर्नुहोस्)'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Income Topic Modal */}
+      {isAddHeadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <h3 className="font-extrabold text-sm text-[#1e3a5f]">Add New Income Topic (नयाँ आम्दानी शीर्षक)</h3>
+              <button onClick={() => setIsAddHeadModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const catId = newHeadCategoryId ? parseInt(newHeadCategoryId) : categoriesData?.[0]?.id || 1;
+              if (!catId) {
+                toast.error('कृपया श्रेणी/वर्ग छनौट गर्नुहोस् (Please select a category).');
+                return;
+              }
+              createIncomeHeadMutation.mutate({
+                categoryId: catId,
+                code: newHeadCode.trim() || undefined,
+                name: newHeadName,
+                nameNepali: newHeadNameNepali,
+              });
+            }} className="space-y-3">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  Income Category (श्रेणी/वर्ग) *
+                </label>
+                <select
+                  required
+                  value={newHeadCategoryId}
+                  onChange={(e) => setNewHeadCategoryId(e.target.value)}
+                  className="erp-input font-bold"
+                >
+                  <option value="">-- Select Income Category --</option>
+                  {categoriesData?.map((cat: any) => (
+                    <option key={cat.id} value={cat.id.toString()}>
+                      {cat.name} {cat.nameNepali ? `(${cat.nameNepali})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-amber-700 mt-0.5 font-bold">
+                  ⚠️ यो श्रेणी नराखे 'Advance Payment' मा स्वतः जान्छ — सही श्रेणी रोज्नुहोस्।
+                </p>
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Accounting Code (कोड न.)</label>
+                <input type="text" placeholder="e.g. 10101, 10201" value={newHeadCode} onChange={(e) => setNewHeadCode(e.target.value)} className="erp-input font-mono font-bold" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Income Topic Name (English) *</label>
+                <input type="text" required placeholder="e.g. ICT Lab Grant, Scholarship" value={newHeadName} onChange={(e) => setNewHeadName(e.target.value)} className="erp-input font-bold" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Nepali Title (नेपाली शीर्षक)</label>
+                <input type="text" placeholder="आइटी ल्याब अनुदान" value={newHeadNameNepali} onChange={(e) => setNewHeadNameNepali(e.target.value)} className="erp-input font-nepali font-bold" />
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                <button type="button" onClick={() => setIsAddHeadModalOpen(false)} className="px-4 py-2 border rounded-xl font-bold">Cancel</button>
+                <button type="submit" disabled={createIncomeHeadMutation.isPending} className="px-5 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-xs">
+                  {createIncomeHeadMutation.isPending ? 'Saving...' : 'Save Income Topic'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+
+      {/* Add Party Modal */}
+      {isAddPartyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <h3 className="font-extrabold text-sm text-[#1e3a5f]">Add Party / Donor (आम्दानी स्रोत पक्ष)</h3>
+              <button onClick={() => setIsAddPartyModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const finalPartyType = newPartyType === 'CUSTOM' ? customPartyType : newPartyType;
+              createPartyMutation.mutate({
+                name: newPartyName,
+                nameNepali: newPartyNameNepali,
+                partyType: finalPartyType || 'DONOR',
+                panNo: newPartyPan,
+                phone: newPartyPhone,
+              });
+            }} className="space-y-3">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Organization / Donor Name *</label>
+                <input type="text" required placeholder="Brindaban Local Municipality / EDC / Donor Name" value={newPartyName} onChange={(e) => setNewPartyName(e.target.value)} className="erp-input font-bold" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Nepali Name</label>
+                <input type="text" placeholder="विश्रामपुर गाउँपालिका / राम कुमार" value={newPartyNameNepali} onChange={(e) => setNewPartyNameNepali(e.target.value)} className="erp-input font-nepali font-bold" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Party Type (प्रकार)</label>
+                  <select value={newPartyType} onChange={(e) => setNewPartyType(e.target.value)} className="erp-input font-bold">
+                    <option value="DONOR">DONOR (चन्दादाता / दानवीर)</option>
+                    <option value="GOVT">GOVT (सरकारी निकाय / पालिका)</option>
+                    <option value="WORKER">WORKER (श्रमिक / कामदार / इलेक्ट्रिसियन / प्लम्बर)</option>
+                    <option value="SHOPKEEPER">SHOPKEEPER (पसले / खाद्यान्न / किराना / स्टेसनरी)</option>
+                    <option value="SERVICE_PROVIDER">SERVICE PROVIDER (सेवा प्रदायक - बिजुली / इन्टरनेट)</option>
+                    <option value="VENDOR">VENDOR (विक्रेता / पसल)</option>
+                    <option value="SUPPLIER">SUPPLIER (सामग्री सप्लायर)</option>
+                    <option value="CONTRACTOR">CONTRACTOR (ठेकेदार / निर्माण कार्य)</option>
+                    <option value="STAFF">STAFF / TEACHER (शिक्षक तथा कर्मचारी)</option>
+                    <option value="CUSTOM">OTHER (अन्य नयाँ प्रकार लेख्नुहोस्)...</option>
+                  </select>
+                  {newPartyType === 'CUSTOM' && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Type custom party type (e.g. Electrician, Groceries...)"
+                      value={customPartyType}
+                      onChange={(e) => setCustomPartyType(e.target.value)}
+                      className="erp-input mt-1 font-bold border-rose-400"
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">PAN / Phone</label>
+                  <input type="text" placeholder="Phone or PAN No." value={newPartyPhone} onChange={(e) => setNewPartyPhone(e.target.value)} className="erp-input font-mono" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                <button type="button" onClick={() => setIsAddPartyModalOpen(false)} className="px-4 py-2 border rounded-xl font-bold">Cancel</button>
+                <button type="submit" disabled={createPartyMutation.isPending} className="px-5 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-xs">
+                  {createPartyMutation.isPending ? 'Saving...' : 'Save Party'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Income Entry Modal */}
+      {editingIncome && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-xs">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-base font-extrabold text-[#1e3a5f] flex items-center gap-2">
+                <Edit2 size={18} className="text-emerald-600" />
+                <span>Edit Income Entry (आम्दानी सम्पादन)</span>
+              </h3>
+              <button onClick={() => setEditingIncome(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateIncomeMutation.mutate({
+                  id: editingIncome.id,
+                  data: {
+                    academicYearId: editAcademicYearId ? parseInt(editAcademicYearId) : undefined,
+                    headId: parseInt(editHeadId),
+                    amount: parseFloat(editAmount),
+                    receivedDateBs: editReceivedDateBs,
+                    sourceLevel: editSourceLevel,
+                    sourceOrg: editSourceOrg || null,
+                    partyId: editPartyId ? parseInt(editPartyId) : null,
+                    depositedInAccount: editDepositedInAccount || 'School Main Account',
+                    bankAccountId: editBankAccountId ? parseInt(editBankAccountId) : null,
+                    receivedBy: editReceivedBy || null,
+                    paymentMedium: editPaymentMedium || 'CASH',
+                    chequeNo: editChequeNo || null,
+                    voucherNo: editVoucherNo || null,
+                    remarks: editRemarks || null,
+                  }
+                });
+              }}
+              className="space-y-3"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50/80 p-3 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">आर्थिक वर्ष (Fiscal Year) *</label>
+                  <select
+                    value={editAcademicYearId}
+                    onChange={(e) => setEditAcademicYearId(e.target.value)}
+                    className="erp-input font-bold text-[#1e3a5f]"
+                    required
+                  >
+                    {yearsData?.map((y: any) => (
+                      <option key={y.id} value={y.id}>
+                        आ.व. {y.year} {y.isActive ? '(चालु आ.व.)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Source Level *</label>
+                  <select
+                    value={editSourceLevel}
+                    onChange={(e) => setEditSourceLevel(e.target.value)}
+                    className="erp-input font-bold"
+                    required
+                  >
+                    <option value="Central">Central Govt (सङ्घीय सरकार)</option>
+                    <option value="Provincial">Provincial Govt (प्रदेश सरकार)</option>
+                    <option value="Local">Local Govt (स्थानीय पालिका)</option>
+                    <option value="District">District / EDC (जिल्ला)</option>
+                    <option value="Other">School Own Source (आफ्नै स्रोत)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Income Head / Topic *</label>
+                  <select
+                    value={editHeadId}
+                    onChange={(e) => setEditHeadId(e.target.value)}
+                    className="erp-input font-bold"
+                    required
+                  >
+                    <option value="">-- Select Income Topic --</option>
+                    {headsData?.map((h: any) => (
+                      <option key={h.id} value={h.id}>
+                        {h.code ? `[${h.code}] ` : ''}{h.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Amount (रकम रू) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="erp-input font-mono font-bold text-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Received Date (BS) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editReceivedDateBs}
+                    onChange={(e) => setEditReceivedDateBs(e.target.value)}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Source Org / Party Name</label>
+                  <input
+                    type="text"
+                    value={editSourceOrg}
+                    onChange={(e) => setEditSourceOrg(e.target.value)}
+                    placeholder="e.g. Brindaban Municipality / Donor Name"
+                    className="erp-input font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Registered Party Link</label>
+                  <select
+                    value={editPartyId}
+                    onChange={(e) => setEditPartyId(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="">-- Select Registered Party (Optional) --</option>
+                    {partiesData?.map((p: any) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Payment Method</label>
+                  <select
+                    value={editPaymentMedium}
+                    onChange={(e) => setEditPaymentMedium(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="CASH">CASH (नगद)</option>
+                    <option value="BANK_TRANSFER">BANK TRANSFER (बैंक ट्रान्सफर)</option>
+                    <option value="CHEQUE">CHEQUE (चेक)</option>
+                    <option value="QR_CODE">QR CODE (क्युआर)</option>
+                    <option value="ONLINE">ONLINE / DIGITAL (डिजिटल)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Cheque No. / Trans Ref</label>
+                  <input
+                    type="text"
+                    value={editChequeNo}
+                    onChange={(e) => setEditChequeNo(e.target.value)}
+                    placeholder="CHQ-12345 / Trans Ref"
+                    className="erp-input font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Deposited In Bank Account</label>
+                  {editPaymentMedium === 'CASH' ? (
+                    <div className="p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-xs font-bold text-emerald-950 flex items-center gap-2">
+                      <span>💵</span>
+                      <span>विद्यालय नगद खाता (School Cash)</span>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={editBankAccountId}
+                        onChange={(e) => {
+                          setEditBankAccountId(e.target.value);
+                          const bankObj = bankAccountsData?.find((b: any) => b.id.toString() === e.target.value);
+                          if (bankObj) setEditDepositedInAccount(`${bankObj.bankName} (${bankObj.accountNo})`);
+                        }}
+                        className="erp-input font-bold mb-1"
+                      >
+                        <option value="">-- Select Bank Account --</option>
+                        {bankAccountsData?.map((b: any) => (
+                          <option key={b.id} value={b.id.toString()}>{b.bankName} - {b.accountName} ({b.accountNo})</option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={editDepositedInAccount}
+                        onChange={(e) => setEditDepositedInAccount(e.target.value)}
+                        placeholder="Or type account name manually..."
+                        className="erp-input text-xs"
+                      />
+                    </>
+                  )}
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Voucher No (भौचर नं)</label>
+                  <input
+                    type="text"
+                    value={editVoucherNo}
+                    onChange={(e) => setEditVoucherNo(e.target.value)}
+                    placeholder="VOUCH-2083-001"
+                    className="erp-input font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Received By</label>
+                  <input
+                    type="text"
+                    value={editReceivedBy}
+                    onChange={(e) => setEditReceivedBy(e.target.value)}
+                    className="erp-input"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Remarks</label>
+                  <textarea
+                    rows={2}
+                    value={editRemarks}
+                    onChange={(e) => setEditRemarks(e.target.value)}
+                    className="erp-input"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-3">
+                <button type="button" onClick={() => setEditingIncome(null)} className="px-4 py-2 border rounded-xl font-bold">Cancel</button>
+                <button type="submit" disabled={updateIncomeMutation.isPending} className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl shadow-xs">
+                  {updateIncomeMutation.isPending ? 'Updating...' : 'Update Income Entry'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Legacy / Bulk Fee Collection Modal */}
+      {isLegacyFeeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="text-sm font-extrabold text-[#1e3a5f] flex items-center gap-2">
+                  <Receipt size={16} className="text-amber-600" />
+                  <span>Legacy / Bulk Fee Collection (पुरानो / सामूहिक शुल्क प्रविष्टि)</span>
+                </h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  कक्षागत वा शीर्षकगत जम्मा शुल्क — विद्यार्थी-वार नभएको सामूहिक शुल्क आम्दानी (नगद, बैंक वा मिश्रित भुक्तानी)
+                </p>
+              </div>
+              <button onClick={() => setIsLegacyFeeModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            </div>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              let totalPayable = 0;
+
+              if (legacyFeeTopicMode === 'MULTI') {
+                const validItems = legacyFeeTopics.filter((t) => t.headId && parseFloat(t.amount || '0') > 0);
+                if (validItems.length === 0) {
+                  toast.error('कृपया कम्तीमा एक शीर्षक र मान्य रकम प्रविष्टि गर्नुहोस् (Please add at least one valid topic & amount).');
+                  return;
+                }
+                totalPayable = validItems.reduce((s, t) => s + parseFloat(t.amount || '0'), 0);
+              } else {
+                if (!legacyFeeAmount || parseFloat(legacyFeeAmount) <= 0) {
+                  toast.error('कृपया मान्य जम्मा रकम प्रविष्टि गर्नुहोस् (Please enter valid amount).');
+                  return;
+                }
+                totalPayable = parseFloat(legacyFeeAmount);
+              }
+
+              const resolvedFYId = autoResolvedFY?.id || activeFinancialYear?.id;
+              const defaultHead = headsData?.find((h: any) =>
+                h.category?.name?.toLowerCase().includes('student') || h.category?.name?.toLowerCase().includes('fee')
+              ) || headsData?.[0];
+
+              const targetHeadId = legacyFeeHeadId ? parseInt(legacyFeeHeadId) : (defaultHead?.id || 1);
+
+              if (isLegacyFeeSplit) {
+                const cashAmt = parseFloat(legacyFeeSplitCashAmount || '0');
+                const bankAmt = parseFloat(legacyFeeSplitBankAmount || '0');
+                if (Math.abs((cashAmt + bankAmt) - totalPayable) > 0.01) {
+                  toast.error(`मिश्रित भुक्तानीको योगफल कुल रकमसँग मिल्नुपर्छ (Cash Rs. ${cashAmt} + Bank Rs. ${bankAmt} != Total Rs. ${totalPayable}).`);
+                  return;
+                }
+
+                try {
+                  if (legacyFeeTopicMode === 'MULTI') {
+                    const validItems = legacyFeeTopics.filter((t) => t.headId && parseFloat(t.amount || '0') > 0);
+                    for (const item of validItems) {
+                      const itemAmt = parseFloat(item.amount);
+                      const itemHeadObj = headsData?.find((h: any) => h.id.toString() === item.headId);
+                      const headRatio = itemAmt / totalPayable;
+                      const itemCash = Number((cashAmt * headRatio).toFixed(2));
+                      const itemBank = Number((itemAmt - itemCash).toFixed(2));
+
+                      if (itemCash > 0) {
+                        await api.post('/income/entries', {
+                          headId: parseInt(item.headId),
+                          amount: itemCash,
+                          receivedDateBs: legacyFeeDate || todayBS(),
+                          receivedDateAd: new Date().toISOString().slice(0, 10),
+                          sourceLevel: 'Other',
+                          sourceOrg: `Class: ${legacyFeeClassName || 'Various Classes'}, Students: ${legacyFeeStudentCount || 'N/A'}`,
+                          paymentMedium: 'CASH',
+                          depositedInAccount: 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)',
+                          remarks: `Bulk Fee [${itemHeadObj?.name || 'Topic'}] — Cash portion (Class: ${legacyFeeClassName || 'All'})`,
+                          academicYearId: activeYear?.id || 1,
+                          financialYearId: resolvedFYId,
+                        });
+                      }
+
+                      if (itemBank > 0) {
+                        let depAcc = 'School Operational Account';
+                        if (legacyFeeSplitBankAccountId) {
+                          const bObj = bankAccountsData?.find((b: any) => b.id.toString() === legacyFeeSplitBankAccountId);
+                          if (bObj) depAcc = `${bObj.bankName} (${bObj.accountNo})`;
+                        }
+                        await api.post('/income/entries', {
+                          headId: parseInt(item.headId),
+                          amount: itemBank,
+                          receivedDateBs: legacyFeeDate || todayBS(),
+                          receivedDateAd: new Date().toISOString().slice(0, 10),
+                          sourceLevel: 'Other',
+                          sourceOrg: `Class: ${legacyFeeClassName || 'Various Classes'}, Students: ${legacyFeeStudentCount || 'N/A'}`,
+                          paymentMedium: 'BANK_TRANSFER',
+                          bankAccountId: legacyFeeSplitBankAccountId ? parseInt(legacyFeeSplitBankAccountId) : undefined,
+                          depositedInAccount: depAcc,
+                          chequeNo: legacyFeeSplitChequeNo.trim() || undefined,
+                          remarks: `Bulk Fee [${itemHeadObj?.name || 'Topic'}] — Bank portion (Class: ${legacyFeeClassName || 'All'})`,
+                          academicYearId: activeYear?.id || 1,
+                          financialYearId: resolvedFYId,
+                        });
+                      }
+                    }
+                  } else {
+                    if (cashAmt > 0) {
+                      await api.post('/income/entries', {
+                        headId: targetHeadId,
+                        amount: cashAmt,
+                        receivedDateBs: legacyFeeDate || todayBS(),
+                        receivedDateAd: new Date().toISOString().slice(0, 10),
+                        sourceLevel: 'Other',
+                        sourceOrg: `Class: ${legacyFeeClassName || 'Various Classes'}, Students: ${legacyFeeStudentCount || 'N/A'}`,
+                        paymentMedium: 'CASH',
+                        depositedInAccount: 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)',
+                        remarks: `Bulk Fee — Cash portion (Class: ${legacyFeeClassName || 'All'}) ${legacyFeeRemarks ? `— ${legacyFeeRemarks}` : ''}`,
+                        academicYearId: activeYear?.id || 1,
+                        financialYearId: resolvedFYId,
+                      });
+                    }
+
+                    if (bankAmt > 0) {
+                      let depAcc = 'School Operational Account';
+                      if (legacyFeeSplitBankAccountId) {
+                        const bObj = bankAccountsData?.find((b: any) => b.id.toString() === legacyFeeSplitBankAccountId);
+                        if (bObj) depAcc = `${bObj.bankName} (${bObj.accountNo})`;
+                      }
+                      await api.post('/income/entries', {
+                        headId: targetHeadId,
+                        amount: bankAmt,
+                        receivedDateBs: legacyFeeDate || todayBS(),
+                        receivedDateAd: new Date().toISOString().slice(0, 10),
+                        sourceLevel: 'Other',
+                        sourceOrg: `Class: ${legacyFeeClassName || 'Various Classes'}, Students: ${legacyFeeStudentCount || 'N/A'}`,
+                        paymentMedium: 'BANK_TRANSFER',
+                        bankAccountId: legacyFeeSplitBankAccountId ? parseInt(legacyFeeSplitBankAccountId) : undefined,
+                        depositedInAccount: depAcc,
+                        chequeNo: legacyFeeSplitChequeNo.trim() || undefined,
+                        remarks: `Bulk Fee — Bank portion (Class: ${legacyFeeClassName || 'All'}) ${legacyFeeRemarks ? `— ${legacyFeeRemarks}` : ''}`,
+                        academicYearId: activeYear?.id || 1,
+                        financialYearId: resolvedFYId,
+                      });
+                    }
+                  }
+
+                  toast.success(`सामूहिक शुल्क आम्दानी रू ${totalPayable.toLocaleString()} (मिश्रित भुक्तानी) सुरक्षित भयो!`);
+                  setIsLegacyFeeModalOpen(false);
+                  queryClient.invalidateQueries({ queryKey: ['income-entries'] });
+                  setLegacyFeeAmount('');
+                  setLegacyFeeSplitCashAmount('');
+                  setLegacyFeeSplitBankAmount('');
+                  setLegacyFeeClassName('');
+                  setLegacyFeeRemarks('');
+                } catch (err: any) {
+                  toast.error(err.response?.data?.message || 'Failed to record bulk fee collection.');
+                }
+              } else {
+                if (legacyFeeTopicMode === 'MULTI') {
+                  const validItems = legacyFeeTopics.filter((t) => t.headId && parseFloat(t.amount || '0') > 0);
+                  try {
+                    for (const item of validItems) {
+                      const itemAmt = parseFloat(item.amount);
+                      const itemHeadObj = headsData?.find((h: any) => h.id.toString() === item.headId);
+                      await api.post('/income/entries', {
+                        headId: parseInt(item.headId),
+                        amount: itemAmt,
+                        receivedDateBs: legacyFeeDate || todayBS(),
+                        receivedDateAd: new Date().toISOString().slice(0, 10),
+                        sourceLevel: 'Other',
+                        sourceOrg: `Class: ${legacyFeeClassName || 'Various Classes'}, Students: ${legacyFeeStudentCount || 'N/A'}`,
+                        paymentMedium: legacyFeePaymentMethod,
+                        depositedInAccount: legacyFeePaymentMethod === 'CASH' ? 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)' : 'School Operational Account',
+                        remarks: `Bulk Fee [${itemHeadObj?.name || 'Topic'}] — Class: ${legacyFeeClassName || 'All'} (${legacyFeeRemarks || ''})`,
+                        academicYearId: activeYear?.id || 1,
+                        financialYearId: resolvedFYId,
+                      });
+                    }
+
+                    toast.success(`सामूहिक शुल्क आम्दानी (${validItems.length} शीर्षकहरू) सुरक्षित भयो!`);
+                    setIsLegacyFeeModalOpen(false);
+                    queryClient.invalidateQueries({ queryKey: ['income-entries'] });
+                    setLegacyFeeAmount('');
+                    setLegacyFeeClassName('');
+                    setLegacyFeeRemarks('');
+                  } catch (err: any) {
+                    toast.error(err.response?.data?.message || 'Failed to record multi-topic bulk fee.');
+                  }
+                } else {
+                  addLegacyFeeMutation.mutate({
+                    headId: targetHeadId,
+                    amount: totalPayable,
+                    receivedDateBs: legacyFeeDate || todayBS(),
+                    receivedDateAd: new Date().toISOString().slice(0, 10),
+                    sourceLevel: 'Other',
+                    sourceOrg: `Class: ${legacyFeeClassName || 'Various Classes'}, Students: ${legacyFeeStudentCount || 'N/A'}`,
+                    paymentMedium: legacyFeePaymentMethod,
+                    depositedInAccount: legacyFeePaymentMethod === 'CASH' ? 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)' : 'School Operational Account',
+                    remarks: legacyFeeRemarks
+                      ? `Bulk/Legacy Fee Collection — ${legacyFeeRemarks}`
+                      : `Bulk/Legacy Fee Collection — Class: ${legacyFeeClassName || 'Various'}, ${legacyFeeStudentCount || ''} students`,
+                    academicYearId: activeYear?.id || 1,
+                    financialYearId: resolvedFYId,
+                  });
+                }
+              }
+            }} className="space-y-3.5">
+              {/* Row 1: Class Name & Student Count */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Class Name (कक्षाको नाम)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Class 11 Science, Grade 9"
+                    value={legacyFeeClassName}
+                    onChange={(e) => setLegacyFeeClassName(e.target.value)}
+                    className="erp-input font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">No. of Students (विद्यार्थी संख्या)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="e.g. 45"
+                    value={legacyFeeStudentCount}
+                    onChange={(e) => setLegacyFeeStudentCount(e.target.value)}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Topic Mode Selector: Single vs Multi-Topic */}
+              <div className="bg-amber-50/60 p-3 rounded-xl border border-amber-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-amber-950 text-xs">
+                    शुल्क शीर्षक चयन (Fee Topics / Heads):
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="topicMode"
+                        checked={legacyFeeTopicMode === 'SINGLE'}
+                        onChange={() => setLegacyFeeTopicMode('SINGLE')}
+                        className="text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="font-bold text-gray-700">एकल शीर्षक (Single Topic)</span>
+                    </label>
+                    <label className="inline-flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="topicMode"
+                        checked={legacyFeeTopicMode === 'MULTI'}
+                        onChange={() => setLegacyFeeTopicMode('MULTI')}
+                        className="text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="font-bold text-gray-700">बहु-शीर्षक (Multiple Topics)</span>
+                    </label>
+                  </div>
+                </div>
+
+                {legacyFeeTopicMode === 'SINGLE' ? (
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Fee / Income Topic (शीर्षक छनौट)</label>
+                    <select
+                      value={legacyFeeHeadId}
+                      onChange={(e) => setLegacyFeeHeadId(e.target.value)}
+                      className="erp-input font-bold"
+                    >
+                      <option value="">-- General Student Fee (विद्यार्थी शुल्क आम्दानी) --</option>
+                      {headsData?.map((h: any) => (
+                        <option key={h.id} value={h.id.toString()}>
+                          {h.code ? `[${h.code}] ` : ''}{h.name} {h.nameNepali ? `(${h.nameNepali})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="space-y-1.5">
+                      {legacyFeeTopics.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <select
+                              value={item.headId}
+                              onChange={(e) => {
+                                const updated = [...legacyFeeTopics];
+                                updated[idx].headId = e.target.value;
+                                setLegacyFeeTopics(updated);
+                              }}
+                              className="erp-input font-bold text-xs"
+                              required
+                            >
+                              <option value="">-- Select Fee Topic --</option>
+                              {headsData?.map((h: any) => (
+                                <option key={h.id} value={h.id.toString()}>
+                                  {h.code ? `[${h.code}] ` : ''}{h.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="w-36">
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="रकम रू"
+                              value={item.amount}
+                              onChange={(e) => {
+                                const updated = [...legacyFeeTopics];
+                                updated[idx].amount = e.target.value;
+                                setLegacyFeeTopics(updated);
+                                const sum = updated.reduce((s, t) => s + (parseFloat(t.amount || '0') || 0), 0);
+                                setLegacyFeeAmount(sum.toString());
+                                if (isLegacyFeeSplit) {
+                                  const half = (sum / 2).toFixed(2);
+                                  setLegacyFeeSplitCashAmount(half);
+                                  setLegacyFeeSplitBankAmount((sum - parseFloat(half)).toFixed(2));
+                                }
+                              }}
+                              className="erp-input font-mono font-bold text-amber-900"
+                              required
+                            />
+                          </div>
+                          {legacyFeeTopics.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = legacyFeeTopics.filter((_, i) => i !== idx);
+                                setLegacyFeeTopics(updated);
+                                const sum = updated.reduce((s, t) => s + (parseFloat(t.amount || '0') || 0), 0);
+                                setLegacyFeeAmount(sum.toString());
+                              }}
+                              className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50"
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setLegacyFeeTopics([...legacyFeeTopics, { headId: '', amount: '' }])}
+                      className="text-xs font-extrabold text-amber-700 hover:text-amber-900 hover:underline inline-flex items-center gap-1"
+                    >
+                      <Plus size={12} />
+                      <span>+ Add Another Fee Topic (थप शीर्षक थप्नुहोस्)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Amount & Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Total Amount Collected (जम्मा रकम रू) *</label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    placeholder="e.g. 250000"
+                    value={legacyFeeAmount}
+                    onChange={(e) => {
+                      setLegacyFeeAmount(e.target.value);
+                      if (isLegacyFeeSplit && e.target.value) {
+                        const half = (parseFloat(e.target.value) / 2).toFixed(2);
+                        setLegacyFeeSplitCashAmount(half);
+                        setLegacyFeeSplitBankAmount((parseFloat(e.target.value) - parseFloat(half)).toFixed(2));
+                      }
+                    }}
+                    readOnly={legacyFeeTopicMode === 'MULTI'}
+                    className={`erp-input font-mono font-bold text-amber-700 text-sm ${legacyFeeTopicMode === 'MULTI' ? 'bg-amber-50/50' : ''}`}
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Collection Date (BS)</label>
+                  <input
+                    type="text"
+                    value={legacyFeeDate}
+                    onChange={(e) => setLegacyFeeDate(formatDateInput(e.target.value))}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Split Mode Checkbox for Bulk Fee */}
+              <div className="flex items-center gap-2 p-2.5 bg-slate-100 rounded-xl border border-slate-200">
+                <input
+                  type="checkbox"
+                  id="legacyFeeSplitToggle"
+                  checked={isLegacyFeeSplit}
+                  onChange={(e) => {
+                    setIsLegacyFeeSplit(e.target.checked);
+                    if (e.target.checked && legacyFeeAmount) {
+                      const half = (parseFloat(legacyFeeAmount) / 2).toFixed(2);
+                      setLegacyFeeSplitCashAmount(half);
+                      setLegacyFeeSplitBankAmount((parseFloat(legacyFeeAmount) - parseFloat(half)).toFixed(2));
+                    }
+                  }}
+                  className="h-4 w-4 rounded text-amber-600 focus:ring-amber-500"
+                />
+                <label htmlFor="legacyFeeSplitToggle" className="text-xs font-bold text-gray-800 cursor-pointer">
+                  मिश्रित भुक्तानी गर्नुहोस् (Split Payment: केही नगद + केही बैंक/चेक)
+                </label>
+              </div>
+
+              {isLegacyFeeSplit ? (
+                <div className="space-y-3 bg-amber-50/80 p-3.5 rounded-xl border border-amber-200">
+                  <div className="font-extrabold text-amber-950 text-[11px] uppercase">
+                    Split Breakdown (नगद तथा बैंक रकम विभाजन):
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        💵 नगद रकम (Cash Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={legacyFeeSplitCashAmount}
+                        onChange={(e) => setLegacyFeeSplitCashAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-emerald-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        🏦 बैंक/चेक रकम (Bank Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={legacyFeeSplitBankAmount}
+                        onChange={(e) => setLegacyFeeSplitBankAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-blue-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        Deposited Bank Account *
+                      </label>
+                      <select
+                        value={legacyFeeSplitBankAccountId}
+                        onChange={(e) => setLegacyFeeSplitBankAccountId(e.target.value)}
+                        className="erp-input font-bold"
+                        required={parseFloat(legacyFeeSplitBankAmount || '0') > 0}
+                      >
+                        <option value="">-- Select Bank Account --</option>
+                        {bankAccountsData?.map((b: any) => (
+                          <option key={b.id} value={b.id}>
+                            {b.bankName} - {b.accountNo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        Cheque / Voucher Ref No
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. REF-40912"
+                        value={legacyFeeSplitChequeNo}
+                        onChange={(e) => setLegacyFeeSplitChequeNo(e.target.value)}
+                        className="erp-input font-mono font-bold text-blue-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-bold text-amber-950 bg-white p-2 rounded-lg border border-amber-200 flex justify-between font-mono">
+                    <span>कुल जोड (Total): रू {((parseFloat(legacyFeeSplitCashAmount || '0') + parseFloat(legacyFeeSplitBankAmount || '0'))).toLocaleString()}</span>
+                    <span>कुल शुल्क (Target): रू {(parseFloat(legacyFeeAmount || '0')).toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Payment Method</label>
+                    <select
+                      value={legacyFeePaymentMethod}
+                      onChange={(e) => setLegacyFeePaymentMethod(e.target.value)}
+                      className="erp-input font-bold"
+                    >
+                      <option value="CASH">CASH (नगद)</option>
+                      <option value="BANK_TRANSFER">BANK TRANSFER (बैंक)</option>
+                      <option value="CHEQUE">CHEQUE (चेक)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Remarks (कैफियत)</label>
+                    <input
+                      type="text"
+                      placeholder="Additional notes..."
+                      value={legacyFeeRemarks}
+                      onChange={(e) => setLegacyFeeRemarks(e.target.value)}
+                      className="erp-input"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+                <button type="button" onClick={() => setIsLegacyFeeModalOpen(false)} className="px-4 py-2 border rounded-xl font-bold">Cancel</button>
+                <button type="submit" disabled={addLegacyFeeMutation.isPending} className="px-5 py-2 bg-amber-600 text-white font-bold rounded-xl shadow-xs hover:bg-amber-700">
+                  {addLegacyFeeMutation.isPending ? 'Saving...' : 'Record Bulk Fee Collection (शुल्क सुरक्षित गर्नुहोस्)'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

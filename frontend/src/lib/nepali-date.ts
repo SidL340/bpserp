@@ -1,0 +1,182 @@
+// Nepali date utilities using bikram-sambat package
+import bs from 'bikram-sambat';
+
+export function todayBS(): string {
+  try {
+    const today = new Date();
+    const formatted = bs.toBik_euro(today.toISOString().slice(0, 10));
+    return formatted; // e.g. "2081-05-15"
+  } catch {
+    return '2081-05-15';
+  }
+}
+
+export function todayBSFormatted(): string {
+  try {
+    const today = new Date();
+    return bs.toBik_euro(today.toISOString().slice(0, 10));
+  } catch {
+    return '2081-05-15';
+  }
+}
+
+export function adToBS(date: Date | string): string {
+  try {
+    const d = typeof date === 'string' ? date.slice(0, 10) : date.toISOString().slice(0, 10);
+    return bs.toBik_euro(d);
+  } catch {
+    return '';
+  }
+}
+
+export function bsToLabel(bsStr: string): string {
+  if (!bsStr) return '';
+  const [y, m, d] = bsStr.split('-');
+  const nepaliMonths = [
+    'बैशाख', 'जेठ', 'असार', 'साउन', 'भदौ', 'असोज',
+    'कार्तिक', 'मंसिर', 'पौष', 'माघ', 'फाल्गुन', 'चैत'
+  ];
+  const monthLabel = nepaliMonths[parseInt(m) - 1] || m;
+  return `${d} ${monthLabel} ${y}`;
+}
+
+export function bsMonthLabel(monthNum: number): string {
+  const months = [
+    'Baisakh', 'Jestha', 'Ashadh', 'Shrawan', 'Bhadra', 'Ashwin',
+    'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'
+  ];
+  return months[monthNum - 1] || String(monthNum);
+}
+
+export function getCurrentBSMonth(): string {
+  return todayBS().slice(0, 7); // YYYY-MM
+}
+
+export function getCurrentBSYear(): string {
+  return todayBS().slice(0, 4);
+}
+
+// Convert BS date string (e.g. "2081-05-15") to AD Date string (e.g. "2024-08-31")
+export function bsToAD(bsStr: string): string {
+  if (!bsStr || typeof bsStr !== 'string') return '';
+  try {
+    const parts = bsStr.trim().split('-').map(Number);
+    if (parts.length === 3 && parts[0] > 2000 && parts[0] < 2150 && parts[1] >= 1 && parts[1] <= 12 && parts[2] >= 1 && parts[2] <= 32) {
+      const res = bs.toGreg_text(parts[0], parts[1], parts[2]);
+      return res || '';
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
+// Auto-formats input as YYYY-MM-DD as user types numbers (e.g. 20800403 -> 2080-04-03)
+export function formatDateInput(val: string): string {
+  if (!val) return '';
+  const digits = val.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+}
+
+// Get full month details including starting weekday (0=Sun, 6=Sat) and total days (29-32)
+export function getBSMonthDetails(year: number, month: number) {
+  const nepaliMonths = [
+    'बैशाख', 'जेठ', 'असार', 'साउन', 'भदौ', 'असोज',
+    'कार्तिक', 'मंसिर', 'पौष', 'माघ', 'फाल्गुन', 'चैत'
+  ];
+  const englishMonths = [
+    'Baisakh', 'Jestha', 'Ashadh', 'Shrawan', 'Bhadra', 'Ashwin',
+    'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra'
+  ];
+
+  let startDayOfWeek = 0;
+  try {
+    const adFirstDayStr = bs.toGreg_text(year, month, 1);
+    if (adFirstDayStr) {
+      const adDate = new Date(`${adFirstDayStr}T12:00:00Z`);
+      startDayOfWeek = adDate.getUTCDay();
+    }
+  } catch (err) {
+    console.error('Error getting startDayOfWeek:', err);
+  }
+
+  let totalDays = 30;
+  for (let d = 29; d <= 32; d++) {
+    try {
+      const adStr = bs.toGreg_text(year, month, d);
+      if (adStr) {
+        const bsBack = bs.toBik_euro(adStr);
+        const [by, bm, bd] = bsBack.split('-').map(Number);
+        if (by === year && bm === month && bd === d) {
+          totalDays = d;
+        } else {
+          break;
+        }
+      } else {
+        break;
+      }
+    } catch {
+      break;
+    }
+  }
+
+  return {
+    year,
+    month,
+    monthLabelNepali: nepaliMonths[month - 1] || String(month),
+    monthLabelEnglish: englishMonths[month - 1] || String(month),
+    startDayOfWeek,
+    totalDays,
+  };
+}
+
+// Resolve matching Financial Year object from a list or derive standard FY string
+export interface FinancialYearItem {
+  id: number;
+  year: string;
+  startDateBs: string;
+  endDateBs: string;
+  isActive?: boolean;
+}
+
+export function getFiscalYearFromBS(dateBs: string): string {
+  if (!dateBs) return '';
+  const parts = dateBs.split('-');
+  const y = parseInt(parts[0]);
+  const m = parseInt(parts[1]);
+  if (isNaN(y) || isNaN(m)) return '';
+
+  if (m >= 4) {
+    // Shrawan (4) to Chaitra (12) belongs to y/(y+1)
+    const nextY = (y + 1).toString().slice(-2);
+    return `${y}/${nextY}`;
+  } else {
+    // Baisakh (1) to Ashadh (3) belongs to (y-1)/y
+    const prevY = y - 1;
+    const currY = y.toString().slice(-2);
+    return `${prevY}/${currY}`;
+  }
+}
+
+export function resolveFinancialYear(dateBs: string, fyList: FinancialYearItem[]): FinancialYearItem | null {
+  if (!dateBs || !fyList || fyList.length === 0) return null;
+  const cleanDate = dateBs.trim();
+
+  // 1. Exact range match
+  const matched = fyList.find((fy) => {
+    return fy.startDateBs <= cleanDate && cleanDate <= fy.endDateBs;
+  });
+  if (matched) return matched;
+
+  // 2. Year name match (e.g. 2083/84)
+  const derivedYear = getFiscalYearFromBS(cleanDate);
+  const byDerived = fyList.find((fy) => fy.year === derivedYear || fy.year.replace(/\s+/g, '') === derivedYear);
+  if (byDerived) return byDerived;
+
+  // 3. Fallback to active year or first
+  return fyList.find((fy) => fy.isActive) || fyList[0] || null;
+}
+
+

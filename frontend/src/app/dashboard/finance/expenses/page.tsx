@@ -1,0 +1,4351 @@
+'use client';
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { todayBS, formatDateInput, resolveFinancialYear, getFiscalYearFromBS } from '@/lib/nepali-date';
+import {
+  TrendingDown,
+  Plus,
+  Filter,
+  Receipt,
+  FileText,
+  X,
+  CreditCard,
+  Building,
+  UserCheck,
+  Search,
+  Users,
+  Eye,
+  CheckCircle2,
+  Calendar,
+  Layers,
+  Building2,
+  Printer,
+  Edit2,
+  Trash2,
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import SearchableSelect from '@/components/ui/SearchableSelect';
+
+export default function ExpensesPage() {
+
+  const queryClient = useQueryClient();
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedHeadFilter, setSelectedHeadFilter] = useState('');
+  const [selectedPartyFilter, setSelectedPartyFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedYearFilter, setSelectedYearFilter] = useState<string>('ACTIVE');
+  
+  // Modals
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddHeadModalOpen, setIsAddHeadModalOpen] = useState(false);
+  const [isAddPartyModalOpen, setIsAddPartyModalOpen] = useState(false);
+  const [inspectPartyId, setInspectPartyId] = useState<number | null>(null);
+
+  // Form State
+  const [expenseFormYearId, setExpenseFormYearId] = useState<string>('');
+  const [newHeadCode, setNewHeadCode] = useState('');
+  const [newHeadCategoryId, setNewHeadCategoryId] = useState('');
+  const [newHeadName, setNewHeadName] = useState('');
+  const [newHeadNameNepali, setNewHeadNameNepali] = useState('');
+
+  const [newPartyName, setNewPartyName] = useState('');
+  const [newPartyNameNepali, setNewPartyNameNepali] = useState('');
+  const [newPartyType, setNewPartyType] = useState('VENDOR');
+  const [customPartyType, setCustomPartyType] = useState('');
+  const [newPartyPan, setNewPartyPan] = useState('');
+  const [newPartyPhone, setNewPartyPhone] = useState('');
+
+  const [paymentMedium, setPaymentMedium] = useState('CASH');
+  const [selectedPartyId, setSelectedPartyId] = useState('');
+  const [selectedBankAcc, setSelectedBankAcc] = useState('');
+  const [approvedByOption, setApprovedByOption] = useState('Principal (प्रधानाध्यापक)');
+  const [customApprovedBy, setCustomApprovedBy] = useState('');
+
+  // Continuous Entry States for Adding Expense
+  const [addExpenseHeadId, setAddExpenseHeadId] = useState('');
+  const [addExpenseAmount, setAddExpenseAmount] = useState('');
+  const [addExpensePaidToManual, setAddExpensePaidToManual] = useState('');
+  const [addExpenseBillNo, setAddExpenseBillNo] = useState('');
+  const [addExpenseChequeNo, setAddExpenseChequeNo] = useState('');
+  const [addExpenseChequePayeeName, setAddExpenseChequePayeeName] = useState('');
+  const [addExpenseDescription, setAddExpenseDescription] = useState('');
+  const [addExpenseRemarks, setAddExpenseRemarks] = useState('');
+
+  // Split Expense Payment State (खर्च मिश्रित भुक्तानी: नगद + बैंक/चेक)
+  const [isAddExpenseSplit, setIsAddExpenseSplit] = useState(false);
+  const [addExpenseSplitCashAmount, setAddExpenseSplitCashAmount] = useState('');
+  const [addExpenseSplitBankAmount, setAddExpenseSplitBankAmount] = useState('');
+  const [addExpenseSplitBankAccountId, setAddExpenseSplitBankAccountId] = useState('');
+  const [addExpenseSplitChequeNo, setAddExpenseSplitChequeNo] = useState('');
+  const [addExpenseSplitPayeeName, setAddExpenseSplitPayeeName] = useState('');
+
+  // Date States with Auto Formatting
+  const [addExpenseDateBs, setAddExpenseDateBs] = useState(todayBS());
+  const [addChequeDateBs, setAddChequeDateBs] = useState(todayBS());
+
+  // Edit Expense State
+  const [editingExpense, setEditingExpense] = useState<any>(null);
+  const [editAcademicYearId, setEditAcademicYearId] = useState('');
+  const [editHeadId, setEditHeadId] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editExpenseDateBs, setEditExpenseDateBs] = useState('');
+  const [editPartyId, setEditPartyId] = useState('');
+  const [editPaidTo, setEditPaidTo] = useState('');
+  const [editPaymentMedium, setEditPaymentMedium] = useState('CASH');
+  const [editBankAccountId, setEditBankAccountId] = useState('');
+  const [editPaidFromAccount, setEditPaidFromAccount] = useState('');
+  const [editChequeNo, setEditChequeNo] = useState('');
+  const [editChequePayeeName, setEditChequePayeeName] = useState('');
+  const [editChequeDateBs, setEditChequeDateBs] = useState('');
+  const [editBillNo, setEditBillNo] = useState('');
+  const [editApprovedByOption, setEditApprovedByOption] = useState('Principal (प्रधानाध्यापक)');
+  const [editCustomApprovedBy, setEditCustomApprovedBy] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editRemarks, setEditRemarks] = useState('');
+
+  // ── ACCOUNTS PAYABLE (भुक्तानी गर्न बाँकी हिसाब) STATE ─────────────────────
+  const [activeTab, setActiveTab] = useState<'ALL_EXPENSES' | 'ACCOUNTS_PAYABLE'>('ALL_EXPENSES');
+  const [isRecordBillModalOpen, setIsRecordBillModalOpen] = useState(false);
+  const [isPayInstallmentModalOpen, setIsPayInstallmentModalOpen] = useState(false);
+  const [selectedPayableBill, setSelectedPayableBill] = useState<any>(null);
+
+  // New Bill Form State
+  const [billFinancialYearId, setBillFinancialYearId] = useState('');
+  const [billPartyId, setBillPartyId] = useState('');
+  const [billHeadId, setBillHeadId] = useState('');
+  const [billNo, setBillNo] = useState('');
+  const [billDateBs, setBillDateBs] = useState(todayBS());
+  const [billTotalAmount, setBillTotalAmount] = useState('');
+  const [billInitialPaid, setBillInitialPaid] = useState('');
+  const [billPaymentMedium, setBillPaymentMedium] = useState('CHEQUE');
+  const [billBankAccountId, setBillBankAccountId] = useState('');
+  const [billChequeNo, setBillChequeNo] = useState('');
+  const [billDescription, setBillDescription] = useState('');
+
+  // Installment Payment Form State
+  const [instFinancialYearId, setInstFinancialYearId] = useState('');
+  const [instAmount, setInstAmount] = useState('');
+  const [instDateBs, setInstDateBs] = useState(todayBS());
+  const [instPaymentMedium, setInstPaymentMedium] = useState('CHEQUE');
+  const [instBankAccountId, setInstBankAccountId] = useState('');
+  const [instChequeNo, setInstChequeNo] = useState('');
+  const [instChequePayeeName, setInstChequePayeeName] = useState('');
+  const [instVoucherNo, setInstVoucherNo] = useState('');
+  const [instRemarks, setInstRemarks] = useState('');
+  // Installment Split Payment
+  const [isInstSplitPayment, setIsInstSplitPayment] = useState(false);
+  const [instSplitCashAmount, setInstSplitCashAmount] = useState('');
+  const [instSplitBankAmount, setInstSplitBankAmount] = useState('');
+  const [instSplitBankAccountId, setInstSplitBankAccountId] = useState('');
+  const [instSplitChequeNo, setInstSplitChequeNo] = useState('');
+
+  // Vendor Total Balance Lump-Sum Payment State (पार्टी कुल बक्यौता एकमुष्ट भुक्तानी)
+  const [isPayVendorLumpSumOpen, setIsPayVendorLumpSumOpen] = useState(false);
+  const [lumpSumPartyId, setLumpSumPartyId] = useState('');
+  const [lumpSumHeadId, setLumpSumHeadId] = useState('');
+  const [lumpSumFinancialYearId, setLumpSumFinancialYearId] = useState('');
+  const [lumpSumDateBs, setLumpSumDateBs] = useState(todayBS());
+  const [lumpSumTotalAmount, setLumpSumTotalAmount] = useState('');
+  const [isLumpSumSplit, setIsLumpSumSplit] = useState(false);
+  const [lumpSumPaymentMedium, setLumpSumPaymentMedium] = useState('CHEQUE');
+  const [lumpSumBankAccountId, setLumpSumBankAccountId] = useState('');
+  const [lumpSumChequeNo, setLumpSumChequeNo] = useState('');
+  const [lumpSumChequePayeeName, setLumpSumChequePayeeName] = useState('');
+  const [lumpSumVoucherNo, setLumpSumVoucherNo] = useState('');
+  const [lumpSumRemarks, setLumpSumRemarks] = useState('');
+  const [lumpSumSplitCashAmount, setLumpSumSplitCashAmount] = useState('');
+  const [lumpSumSplitBankAmount, setLumpSumSplitBankAmount] = useState('');
+  const [lumpSumSplitBankAccountId, setLumpSumSplitBankAccountId] = useState('');
+  const [lumpSumSplitChequeNo, setLumpSumSplitChequeNo] = useState('');
+
+  // Edit Payable Bill State
+  const [editingPayableBill, setEditingPayableBill] = useState<any>(null);
+  const [editPayBillNo, setEditPayBillNo] = useState('');
+  const [editPayBillDateBs, setEditPayBillDateBs] = useState('');
+  const [editPayBillPartyId, setEditPayBillPartyId] = useState('');
+  const [editPayBillHeadId, setEditPayBillHeadId] = useState('');
+  const [editPayBillTotalAmount, setEditPayBillTotalAmount] = useState('');
+  const [editPayBillDescription, setEditPayBillDescription] = useState('');
+  const [isDeletingBill, setIsDeletingBill] = useState(false);
+
+
+  // ── 1. QUERIES ──────────────────────────────────────────────────────────────
+  const { data: schoolProfile } = useQuery({
+    queryKey: ['school-profile'],
+    queryFn: async () => {
+      const res = await api.get('/school/profile');
+      return res.data?.data;
+    },
+  });
+
+  const { data: yearsData } = useQuery({
+    queryKey: ['academic-years'],
+    queryFn: async () => {
+      const res = await api.get('/classes/academic-years/all');
+      return res.data?.data || [];
+    },
+  });
+  const activeYear = yearsData?.find((y: any) => y.isActive) || yearsData?.[0];
+
+  // Financial Years (साउन–असार)
+  const { data: financialYearsData } = useQuery({
+    queryKey: ['financial-years-all'],
+    queryFn: async () => {
+      const res = await api.get('/financial-years/all');
+      return res.data?.data || [];
+    },
+  });
+  const activeFinancialYear = financialYearsData?.find((f: any) => f.isActive) || financialYearsData?.[0];
+  const autoResolvedFY = resolveFinancialYear(addExpenseDateBs, financialYearsData || []);
+  const autoResolvedBillFY = resolveFinancialYear(billDateBs, financialYearsData || []);
+  const autoResolvedInstFY = resolveFinancialYear(instDateBs, financialYearsData || []);
+  const autoResolvedLumpSumFY = resolveFinancialYear(lumpSumDateBs, financialYearsData || []);
+
+
+  // Resolve current filtered financial year ID
+  const effectiveFYId = selectedYearFilter === 'ALL'
+    ? ''
+    : selectedYearFilter === 'ACTIVE'
+    ? (activeFinancialYear?.id ? String(activeFinancialYear.id) : '')
+    : selectedYearFilter;
+
+  // Dedicated Payables Summary Query (across all Fiscal Years & Parties)
+  const { data: payablesData, isLoading: isPayablesLoading } = useQuery({
+    queryKey: ['payables-summary', selectedYearFilter, selectedPartyFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (effectiveFYId) params.append('financialYearId', effectiveFYId);
+      if (selectedPartyFilter && selectedPartyFilter !== 'ALL') params.append('partyId', selectedPartyFilter);
+      const res = await api.get(`/parties/payables-summary?${params.toString()}`);
+      return res.data?.data;
+    },
+  });
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ['expense-categories'],
+    queryFn: async () => {
+      const res = await api.get('/expense/categories');
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: headsData } = useQuery({
+    queryKey: ['expense-heads'],
+    queryFn: async () => {
+      const res = await api.get('/expense/heads');
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: partiesData } = useQuery({
+    queryKey: ['parties-list'],
+    queryFn: async () => {
+      const res = await api.get('/parties');
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: bankAccountsData } = useQuery({
+    queryKey: ['bank-accounts'],
+    queryFn: async () => {
+      const res = await api.get('/school/bank-accounts');
+      return res.data?.data || [];
+    },
+  });
+
+  const { data: entriesData, isLoading } = useQuery({
+    queryKey: ['expense-entries', selectedCategory, selectedHeadFilter, selectedPartyFilter, searchQuery, effectiveFYId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedCategory) params.append('categoryId', selectedCategory);
+      if (selectedHeadFilter) params.append('headId', selectedHeadFilter);
+      if (selectedPartyFilter) params.append('partyId', selectedPartyFilter);
+      if (searchQuery) params.append('q', searchQuery);
+      if (effectiveFYId) params.append('financialYearId', effectiveFYId);
+      const res = await api.get(`/expense/entries?${params.toString()}`);
+      return res.data;
+    },
+  });
+
+  // Party Voucher Details Query
+  const { data: partyVouchersData } = useQuery({
+    queryKey: ['party-vouchers', inspectPartyId],
+    queryFn: async () => {
+      if (!inspectPartyId) return null;
+      const res = await api.get(`/parties/${inspectPartyId}/vouchers`);
+      return res.data?.data;
+    },
+    enabled: !!inspectPartyId,
+  });
+
+  // ── 2. MUTATIONS ────────────────────────────────────────────────────────────
+  const createExpenseHeadMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post('/expense/heads', payload);
+      return res.data;
+    },
+    onSuccess: (res: any) => {
+      toast.success('New Expense Topic created!');
+      queryClient.invalidateQueries({ queryKey: ['expense-heads'] });
+      if (res?.data?.id) {
+        setBillHeadId(res.data.id.toString());
+        setAddExpenseHeadId(res.data.id.toString());
+      }
+      setIsAddHeadModalOpen(false);
+      setNewHeadCode('');
+      setNewHeadCategoryId('');
+      setNewHeadName('');
+      setNewHeadNameNepali('');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to create expense topic.');
+    },
+  });
+
+  const createPartyMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await api.post('/parties', payload);
+      return res.data;
+    },
+    onSuccess: (res: any) => {
+      toast.success('New Party/Recipient saved!');
+      queryClient.invalidateQueries({ queryKey: ['parties-list'] });
+      if (res?.data?.id) {
+        setSelectedPartyId(res.data.id.toString());
+        setBillPartyId(res.data.id.toString());
+      }
+      setIsAddPartyModalOpen(false);
+      setNewPartyName('');
+      setNewPartyNameNepali('');
+      setNewPartyPan('');
+      setNewPartyPhone('');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to create party/recipient.');
+    },
+  });
+
+  const addExpenseMutation = useMutation({
+    mutationFn: async (formData: any) => {
+      const res = await api.post('/expense/entries', {
+        ...formData,
+        academicYearId: activeYear?.id || 1,
+        financialYearId: formData.financialYearId || (expenseFormYearId ? parseInt(expenseFormYearId) : (autoResolvedFY?.id || activeFinancialYear?.id)),
+        expenseDateAd: new Date().toISOString().slice(0, 10),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('खर्च सुरक्षित भयो! (सोही पार्टी र शीर्षकमा थप खर्च प्रविष्टि गर्न सक्नुहुन्छ)');
+      // Continuous data entry mode: retain Party, Topic, Date & Fiscal Year; reset transaction amounts & bill info
+      setAddExpenseAmount('');
+      setAddExpenseBillNo('');
+      setAddExpenseChequeNo('');
+      setAddExpenseChequePayeeName('');
+      setAddExpenseDescription('');
+      setAddExpenseRemarks('');
+      queryClient.invalidateQueries({ queryKey: ['expense-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to record expense');
+    },
+  });
+
+  const handleAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!addExpenseHeadId) {
+      toast.error('कृपया खर्च शीर्षक छनौट गर्नुहोस् (Please select an Expense Topic).');
+      return;
+    }
+    if (!addExpenseAmount || parseFloat(addExpenseAmount) <= 0) {
+      toast.error('कृपया मान्य खर्च रकम प्रविष्टि गर्नुहोस् (Please enter a valid amount).');
+      return;
+    }
+
+    const totalAmt = parseFloat(addExpenseAmount);
+    const resolvedFYId = expenseFormYearId ? parseInt(expenseFormYearId) : (autoResolvedFY?.id || activeFinancialYear?.id || 1);
+    const targetHeadId = parseInt(addExpenseHeadId);
+    const finalApprovedBy = approvedByOption === 'CUSTOM' ? customApprovedBy : approvedByOption;
+
+    let resolvedPaidTo = addExpensePaidToManual.trim() || undefined;
+    if (selectedPartyId) {
+      const partyObj = partiesData?.find((p: any) => p.id.toString() === selectedPartyId);
+      if (partyObj) resolvedPaidTo = partyObj.name;
+    }
+
+    if (isAddExpenseSplit) {
+      const cashAmt = parseFloat(addExpenseSplitCashAmount || '0');
+      const bankAmt = parseFloat(addExpenseSplitBankAmount || '0');
+      if (Math.abs((cashAmt + bankAmt) - totalAmt) > 0.01) {
+        toast.error(`मिश्रित खर्चको योगफल कुल रकमसँग मिल्नुपर्छ (Cash Rs. ${cashAmt} + Bank Rs. ${bankAmt} != Total Rs. ${totalAmt}).`);
+        return;
+      }
+
+      try {
+        if (cashAmt > 0) {
+          await api.post('/expense/entries', {
+            academicYearId: activeYear?.id || 1,
+            financialYearId: resolvedFYId,
+            headId: targetHeadId,
+            amount: cashAmt,
+            expenseDateBs: addExpenseDateBs || todayBS(),
+            expenseDateAd: new Date().toISOString().slice(0, 10),
+            partyId: selectedPartyId ? parseInt(selectedPartyId) : undefined,
+            paidTo: resolvedPaidTo,
+            paymentMedium: 'CASH',
+            paidFromAccount: 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)',
+            billNo: addExpenseBillNo.trim() || undefined,
+            description: addExpenseDescription.trim() ? `${addExpenseDescription.trim()} [Cash Portion 1/2]` : undefined,
+            remarks: addExpenseRemarks.trim() ? `${addExpenseRemarks.trim()} [Cash Portion 1/2]` : 'Cash Expense (1/2)',
+            approvedBy: finalApprovedBy || 'Principal (प्रधानाध्यापक)',
+          });
+        }
+
+        if (bankAmt > 0) {
+          let paidFromAcc = 'School Operational Account';
+          if (addExpenseSplitBankAccountId) {
+            const bObj = bankAccountsData?.find((b: any) => b.id.toString() === addExpenseSplitBankAccountId);
+            if (bObj) paidFromAcc = `${bObj.bankName} (${bObj.accountNo})`;
+          }
+
+          await api.post('/expense/entries', {
+            academicYearId: activeYear?.id || 1,
+            financialYearId: resolvedFYId,
+            headId: targetHeadId,
+            amount: bankAmt,
+            expenseDateBs: addExpenseDateBs || todayBS(),
+            expenseDateAd: new Date().toISOString().slice(0, 10),
+            partyId: selectedPartyId ? parseInt(selectedPartyId) : undefined,
+            paidTo: resolvedPaidTo,
+            paymentMedium: 'CHEQUE',
+            bankAccountId: addExpenseSplitBankAccountId ? parseInt(addExpenseSplitBankAccountId) : undefined,
+            paidFromAccount: paidFromAcc,
+            chequeNo: addExpenseSplitChequeNo.trim() || undefined,
+            chequePayeeName: addExpenseSplitPayeeName.trim() || resolvedPaidTo,
+            billNo: addExpenseBillNo.trim() || undefined,
+            description: addExpenseDescription.trim() ? `${addExpenseDescription.trim()} [Bank/Cheque Portion 2/2]` : undefined,
+            remarks: addExpenseRemarks.trim() ? `${addExpenseRemarks.trim()} [Bank/Cheque Portion 2/2]` : 'Bank/Cheque Expense (2/2)',
+            approvedBy: finalApprovedBy || 'Principal (प्रधानाध्यापक)',
+          });
+        }
+
+        toast.success(`मिश्रित खर्च प्रविष्टि रू ${totalAmt.toLocaleString()} (नगद + बैंक) सुरक्षित भयो!`);
+        queryClient.invalidateQueries({ queryKey: ['expense-entries'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+        queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+        setAddExpenseAmount('');
+        setAddExpenseSplitCashAmount('');
+        setAddExpenseSplitBankAmount('');
+        setAddExpenseBillNo('');
+        setAddExpenseChequeNo('');
+        setAddExpenseChequePayeeName('');
+        setAddExpenseDescription('');
+        setAddExpenseRemarks('');
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || 'Failed to record split expense.');
+      }
+    } else {
+      const data: any = {
+        headId: targetHeadId,
+        amount: totalAmt,
+        expenseDateBs: addExpenseDateBs || todayBS(),
+        paymentMedium,
+        billNo: addExpenseBillNo.trim() || null,
+        description: addExpenseDescription.trim() || null,
+        remarks: addExpenseRemarks.trim() || null,
+      };
+
+      if (selectedPartyId) {
+        data.partyId = parseInt(selectedPartyId);
+        const partyObj = partiesData?.find((p: any) => p.id.toString() === selectedPartyId);
+        if (partyObj) data.paidTo = partyObj.name;
+      } else if (addExpensePaidToManual) {
+        data.paidTo = addExpensePaidToManual.trim();
+      }
+
+      if (paymentMedium === 'CASH') {
+        data.bankAccountId = null;
+        data.paidFromAccount = 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)';
+        data.chequeNo = null;
+        data.chequeDateBs = null;
+        data.chequePayeeName = null;
+      } else if (selectedBankAcc) {
+        const bankObj = bankAccountsData?.find((b: any) => b.id.toString() === selectedBankAcc);
+        if (bankObj) {
+          data.bankAccountId = bankObj.id;
+          data.paidFromAccount = `${bankObj.bankName} (${bankObj.accountNo})`;
+        }
+      } else {
+        data.paidFromAccount = 'School Operational Account';
+      }
+
+      if (paymentMedium === 'CHEQUE' || paymentMedium === 'BANK_TRANSFER') {
+        data.chequeNo = addExpenseChequeNo.trim() || null;
+        data.chequeDateBs = addChequeDateBs || null;
+        data.chequePayeeName = addExpenseChequePayeeName.trim() || null;
+      }
+
+      if (finalApprovedBy) data.approvedBy = finalApprovedBy;
+
+      addExpenseMutation.mutate(data);
+    }
+  };
+
+  const updateExpenseMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await api.put(`/expense/entries/${id}`, {
+        ...data,
+        academicYearId: editAcademicYearId ? parseInt(editAcademicYearId) : undefined,
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('Expense entry updated successfully');
+      setEditingExpense(null);
+      queryClient.invalidateQueries({ queryKey: ['expense-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to update expense');
+    },
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await api.post(`/expense/entries/${id}/delete`);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('Expense entry deleted');
+      queryClient.invalidateQueries({ queryKey: ['expense-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to delete expense');
+    },
+  });
+
+  const handleOpenEditModal = (entry: any) => {
+    setEditingExpense(entry);
+    setEditAcademicYearId(entry.academicYearId ? entry.academicYearId.toString() : (activeYear?.id ? activeYear.id.toString() : ''));
+    setEditHeadId(entry.headId ? entry.headId.toString() : '');
+    setEditAmount(entry.amount ? entry.amount.toString() : '');
+    setEditExpenseDateBs(entry.expenseDateBs || todayBS());
+    setEditPartyId(entry.partyId ? entry.partyId.toString() : '');
+    setEditPaidTo(entry.paidTo || '');
+    setEditPaymentMedium(entry.paymentMedium || 'CASH');
+    setEditBankAccountId(entry.bankAccountId ? entry.bankAccountId.toString() : '');
+    setEditPaidFromAccount(entry.paidFromAccount || 'School Operational Account');
+    setEditChequeNo(entry.chequeNo || '');
+    setEditChequePayeeName(entry.chequePayeeName || '');
+    setEditChequeDateBs(entry.chequeDateBs || todayBS());
+    setEditBillNo(entry.billNo || '');
+    if (['Principal (प्रधानाध्यापक)', 'SMC Chairperson (विद्यालय व्यवस्थापन समिति अध्यक्ष)', 'Accountant (लेखापाल)', 'Vice Principal (सहायक प्र.अ.)'].includes(entry.approvedBy)) {
+      setEditApprovedByOption(entry.approvedBy);
+      setEditCustomApprovedBy('');
+    } else if (entry.approvedBy) {
+      setEditApprovedByOption('CUSTOM');
+      setEditCustomApprovedBy(entry.approvedBy);
+    } else {
+      setEditApprovedByOption('Principal (प्रधानाध्यापक)');
+      setEditCustomApprovedBy('');
+    }
+    setEditDescription(entry.description || '');
+    setEditRemarks(entry.remarks || '');
+  };
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExpense) return;
+
+    const data: any = {
+      headId: parseInt(editHeadId),
+      amount: parseFloat(editAmount),
+      expenseDateBs: editExpenseDateBs,
+      paymentMedium: editPaymentMedium,
+      chequePayeeName: editChequePayeeName || null,
+      billNo: editBillNo || null,
+      description: editDescription || null,
+      remarks: editRemarks || null,
+    };
+
+    if (editPartyId) {
+      data.partyId = parseInt(editPartyId);
+      const partyObj = partiesData?.find((p: any) => p.id.toString() === editPartyId);
+      data.paidTo = partyObj ? partyObj.name : editPaidTo;
+    } else {
+      data.partyId = null;
+      data.paidTo = editPaidTo || null;
+    }
+
+    if (editPaymentMedium === 'CASH') {
+      data.bankAccountId = null;
+      data.paidFromAccount = 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)';
+      data.chequeNo = null;
+      data.chequeDateBs = null;
+      data.chequePayeeName = null;
+    } else if (editBankAccountId) {
+      const bankObj = bankAccountsData?.find((b: any) => b.id.toString() === editBankAccountId);
+      if (bankObj) {
+        data.bankAccountId = bankObj.id;
+        data.paidFromAccount = `${bankObj.bankName} (${bankObj.accountNo})`;
+      }
+    } else {
+      data.bankAccountId = null;
+      data.paidFromAccount = editPaidFromAccount || 'School Operational Account';
+    }
+
+    if (editPaymentMedium === 'CHEQUE' || editPaymentMedium === 'BANK_TRANSFER') {
+      data.chequeNo = editChequeNo || null;
+      data.chequeDateBs = editChequeDateBs || null;
+    }
+
+    const finalApprovedBy = editApprovedByOption === 'CUSTOM' ? editCustomApprovedBy : editApprovedByOption;
+    data.approvedBy = finalApprovedBy || 'Principal';
+
+    updateExpenseMutation.mutate({ id: editingExpense.id, data });
+  };
+
+  const triggerSingleVoucherPrint = (v: any) => {
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const sNameNp = schoolProfile?.schoolNameNepali || schoolProfile?.schoolName || 'बृन्दावन पब्लिक स्कूल';
+    const sNameEn = schoolProfile?.schoolName || 'Brindawan Public School';
+    const sAddress = schoolProfile?.address || 'विश्रामपुर, रौतहट';
+
+    const partyName = v.party?.name || v.paidTo || 'Recipient / Party';
+    const partyPan = v.party?.panNo ? ` | PAN: ${v.party.panNo}` : '';
+    const topicName = v.head ? `${v.head.code ? `[${v.head.code}] ` : ''}${v.head.name}` : (v.topic || 'Expense Head');
+    const amount = v.amount || 0;
+    const dateBs = v.expenseDateBs || todayBS();
+    const voucherNo = v.voucherNo || `VOUCH-${v.id}`;
+    const paymentMedium = v.paymentMedium || 'CASH';
+    const chequeNo = v.chequeNo || '';
+    const chequePayee = v.chequePayeeName || partyName;
+    const account = v.paidFromAccount || 'School Operational Account';
+    const approvedBy = v.approvedBy || 'Principal (प्रधानाध्यापक)';
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Official Journal Voucher - ${voucherNo}</title>
+          <style>
+            @page { size: A4 portrait; margin: 10mm; }
+            * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background: #fff; color: #111; font-size: 11px; }
+            .card { border: 2px solid #1e3a5f; padding: 22px; border-radius: 8px; }
+            .header { text-align: center; border-bottom: 2px solid #1e3a5f; padding-bottom: 8px; margin-bottom: 12px; }
+            .school-name { font-size: 18px; font-weight: 900; color: #1e3a5f; margin: 2px 0; }
+            .badge { font-size: 11px; font-weight: 900; background: #eff6ff; color: #1e3a5f; display: inline-block; padding: 3px 12px; border-radius: 4px; border: 1px solid #bfdbfe; margin-top: 4px; }
+            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; margin-bottom: 14px; background: #f8fafc; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px; }
+            th { background: #1e3a5f; color: #fff; padding: 8px; text-align: left; font-size: 10px; border: 1px solid #1e3a5f; }
+            td { padding: 8px; border: 1px solid #cbd5e1; }
+            .footer-sig { margin-top: 50px; display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; }
+            .sig-box { width: 160px; text-align: center; border-top: 1px solid #333; padding-top: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <div class="school-name">${sNameNp}</div>
+              <div style="font-size: 11px; font-weight: bold; color: #4b5563;">${sNameEn}, ${sAddress}</div>
+              <div class="badge">OFFICIAL GOVERNMENT FORMAT JOURNAL VOUCHER (गोश्वारा भौचर)</div>
+            </div>
+
+            <div class="meta-grid">
+              <div>Voucher No: <strong>${voucherNo}</strong> ${v.billNo ? `| Bill No: <strong>${v.billNo}</strong>` : ''}</div>
+              <div>Date (BS): <strong>${dateBs}</strong></div>
+              <div>Paid To / Party: <strong style="color: #1e3a5f;">${partyName}${partyPan}</strong></div>
+              <div>Payment Mode: <strong>${paymentMedium}</strong> ${chequeNo ? `| Cheque No: <strong style="color: #6b21a8;">${chequeNo}</strong>` : ''}</div>
+              ${chequePayee ? `<div style="grid-column: span 2;">Cheque Payee Name: <strong>${chequePayee}</strong></div>` : ''}
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 40px; text-align: center;">S.N.</th>
+                  <th>ACCOUNT HEAD & PARTICULARS</th>
+                  <th style="width: 130px; text-align: right;">DEBIT (Dr. रू)</th>
+                  <th style="width: 130px; text-align: right;">CREDIT (Cr. रू)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="text-align: center;">1</td>
+                  <td>
+                    <strong>${topicName}</strong>
+                    <div style="font-size: 10px; color: #555; margin-top: 2px;">
+                      Party/Recipient: ${partyName} | Medium: ${paymentMedium} ${chequeNo ? `(Cheque No: ${chequeNo})` : ''}
+                    </div>
+                  </td>
+                  <td style="text-align: right; font-family: monospace; font-weight: bold; color: #b91c1c;">रू ${amount.toLocaleString()}</td>
+                  <td style="text-align: right; font-family: monospace; font-weight: bold; color: #15803d;">रू ${amount.toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div style="margin-bottom: 20px; font-size: 11px; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+              <div><strong>Payment Account / Bank:</strong> ${account}</div>
+              <div><strong>Narration / Remarks:</strong> ${v.description || v.remarks || 'Expense Payment Disbursement'}</div>
+            </div>
+
+            <div class="footer-sig">
+              <div class="sig-box">Prepared By (लेखापाल)</div>
+              <div class="sig-box">Checked By (जाँच गर्ने)</div>
+              <div class="sig-box">Approved By (${approvedBy})</div>
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() { setTimeout(function() { window.print(); }, 400); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
+  const triggerFullPartyLedgerPrint = (data: any) => {
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const sNameNp = schoolProfile?.schoolNameNepali || schoolProfile?.schoolName || 'बृन्दावन पब्लिक स्कूल';
+    const sNameEn = schoolProfile?.schoolName || 'Brindawan Public School';
+    const sAddress = schoolProfile?.address || 'विश्रामपुर, रौतहट';
+
+    const party = data.party || {};
+    const expenses = data.expenses || [];
+    const totalExp = data.totalExpenseSum || 0;
+    const totalInc = data.totalIncomeSum || 0;
+    const netBal = totalExp - totalInc;
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Party Ledger Statement - ${party.name || 'Party'}</title>
+          <style>
+            @page { size: A4 portrait; margin: 10mm; }
+            * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background: #fff; color: #111; font-size: 11px; }
+            .card { border: 2px solid #1e3a5f; padding: 20px; border-radius: 8px; }
+            .header { text-align: center; border-bottom: 2px solid #1e3a5f; padding-bottom: 8px; margin-bottom: 12px; }
+            .school-name { font-size: 18px; font-weight: 900; color: #1e3a5f; margin: 2px 0; }
+            .party-header { background: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; border-radius: 6px; margin-bottom: 12px; font-size: 11px; }
+            .summary-box { display: flex; justify-content: space-between; background: #eff6ff; border: 1px solid #bfdbfe; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 14px; }
+            th { background: #1e3a5f; color: #fff; padding: 6px; text-align: left; font-size: 9.5px; border: 1px solid #1e3a5f; }
+            td { padding: 6px; border: 1px solid #cbd5e1; }
+            .footer-sig { margin-top: 40px; display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; }
+            .sig-box { width: 150px; text-align: center; border-top: 1px solid #333; padding-top: 3px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <div class="school-name">${sNameNp}</div>
+              <div style="font-size: 11px; font-weight: bold; color: #4b5563;">${sNameEn}, ${sAddress}</div>
+              <div style="font-size: 12px; font-weight: 900; color: #1e3a5f; margin-top: 4px; text-transform: uppercase;">PARTY LEDGER STATEMENT & VOUCHER REGISTER (पाउने व्यक्ति/संस्था खाता लेजर)</div>
+            </div>
+
+            <div class="party-header">
+              <div style="font-size: 14px; font-weight: 900; color: #1e3a5f;">Party Name: ${party.name} ${party.nameNepali ? `(${party.nameNepali})` : ''}</div>
+              <div>PAN/VAT No: <strong>${party.panNo || 'N/A'}</strong> | Phone: <strong>${party.phone || 'N/A'}</strong> | Type: <strong>${party.partyType || 'VENDOR'}</strong></div>
+            </div>
+
+            <div class="summary-box">
+              <div>Total Expenses Paid: <span style="color: #b91c1c;">रू ${totalExp.toLocaleString()}</span></div>
+              <div>Total Receipts/Income: <span style="color: #15803d;">रू ${totalInc.toLocaleString()}</span></div>
+              <div>Net Ledger Balance: <span style="color: #1e3a5f;">रू ${netBal.toLocaleString()}</span></div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 30px; text-align: center;">S.N.</th>
+                  <th style="width: 75px;">Date (BS)</th>
+                  <th style="width: 90px;">Voucher No</th>
+                  <th>Topic & Description</th>
+                  <th style="width: 120px;">Method / Cheque No</th>
+                  <th style="width: 85px; text-align: right;">Amount (रू)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${expenses.map((e: any, idx: number) => `
+                  <tr>
+                    <td style="text-align: center;">${idx + 1}</td>
+                    <td style="font-family: monospace; font-weight: bold;">${e.expenseDateBs}</td>
+                    <td style="font-family: monospace; font-weight: bold; color: #1e3a5f;">${e.voucherNo || `VOUCH-${e.id}`}</td>
+                    <td><strong>${e.head?.name || 'General Expense'}</strong>${e.description ? `<div style="font-size: 9px; color: #666;">${e.description}</div>` : ''}</td>
+                    <td style="font-family: monospace;">${e.paymentMedium}${e.chequeNo ? ` (Chk: ${e.chequeNo})` : ''}</td>
+                    <td style="text-align: right; font-family: monospace; font-weight: bold; color: #b91c1c;">रू ${(e.amount || 0).toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div class="footer-sig">
+              <div class="sig-box">Prepared By (लेखापाल)</div>
+              <div class="sig-box">Checked By (जाँच गर्ने)</div>
+              <div class="sig-box">Approved By (प्रधानाध्यापक)</div>
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() { setTimeout(function() { window.print(); }, 400); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
+  // ── 3. PRINT ALL-IN-ONE SUMMARY JOURNAL VOUCHER (किस्ता भुक्तानी सारांश भौचर) ──
+  const triggerBillSummaryVoucherPrint = (bill: any) => {
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const sNameNp = schoolProfile?.schoolNameNepali || schoolProfile?.schoolName || 'बृन्दावन पब्लिक स्कूल';
+    const sNameEn = schoolProfile?.schoolName || 'Brindawan Public School';
+    const sAddress = schoolProfile?.address || 'विश्रामपुर, रौतहट';
+
+    const isFullyPaid = bill.remainingDue <= 0;
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Summary Journal Voucher - Bill ${bill.billNo}</title>
+          <style>
+            @page { size: A4 portrait; margin: 10mm; }
+            * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background: #fff; color: #111; font-size: 11px; }
+            .card { border: 2px solid #1e3a5f; padding: 22px; border-radius: 8px; }
+            .header { text-align: center; border-bottom: 2px solid #1e3a5f; padding-bottom: 8px; margin-bottom: 12px; }
+            .school-name { font-size: 18px; font-weight: 900; color: #1e3a5f; margin: 2px 0; }
+            .badge { font-size: 11px; font-weight: 900; background: ${isFullyPaid ? '#ecfdf5' : '#fffbeb'}; color: ${isFullyPaid ? '#047857' : '#b45309'}; display: inline-block; padding: 4px 14px; border-radius: 4px; border: 1px solid ${isFullyPaid ? '#a7f3d0' : '#fde68a'}; margin-top: 4px; text-transform: uppercase; }
+            .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; margin-bottom: 14px; background: #f8fafc; padding: 12px 14px; border-radius: 6px; border: 1px solid #e2e8f0; }
+            .summary-box { display: flex; justify-content: space-between; background: #eff6ff; border: 1.5px solid #bfdbfe; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-weight: bold; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 16px; }
+            th { background: #1e3a5f; color: #fff; padding: 8px; text-align: left; font-size: 10px; border: 1px solid #1e3a5f; }
+            td { padding: 8px; border: 1px solid #cbd5e1; }
+            .footer-sig { margin-top: 45px; display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; }
+            .sig-box { width: 160px; text-align: center; border-top: 1px solid #333; padding-top: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <div class="school-name">${sNameNp}</div>
+              <div style="font-size: 11px; font-weight: bold; color: #4b5563;">${sNameEn}, ${sAddress}</div>
+              <div class="badge">
+                ${isFullyPaid ? '✓ FULLY SETTLED BILL & INSTALLMENT SUMMARY VOUCHER (एकमुष्ट चुक्ता गोश्वारा भौचर)' : '⚡ ACCOUNTS PAYABLE & INSTALLMENT SETTLEMENT VOUCHER (किस्ता भुक्तानी गोश्वारा भौचर)'}
+              </div>
+            </div>
+
+            <div class="meta-grid">
+              <div>Bill / Invoice No: <strong>${bill.billNo}</strong></div>
+              <div>Bill Date (BS): <strong>${bill.billDateBs || bill.dateBs}</strong></div>
+              <div>Vendor / Party: <strong style="color: #1e3a5f;">${bill.partyName}</strong> ${bill.panNo ? `(PAN: ${bill.panNo})` : ''}</div>
+              <div>Expense Topic: <strong>${bill.headName}</strong></div>
+            </div>
+
+            <div class="summary-box">
+              <div>Total Bill Amount: <span style="color: #1e3a5f;">रू ${bill.totalBillAmount.toLocaleString()}</span></div>
+              <div>Total Paid (Installments): <span style="color: #15803d;">रू ${bill.totalPaidAmount.toLocaleString()}</span></div>
+              <div>Balance Due: <span style="color: ${isFullyPaid ? '#15803d' : '#b91c1c'};">${isFullyPaid ? '0 (चुक्ता भएको)' : `रू ${bill.remainingDue.toLocaleString()}`}</span></div>
+            </div>
+
+            <div style="font-size: 11px; font-weight: bold; color: #1e3a5f; margin-bottom: 6px; text-transform: uppercase;">
+              Installment Payments Breakdown (किस्ता भुक्तानी विवरण):
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 30px; text-align: center;">किस्ता #</th>
+                  <th style="width: 80px;">Date (BS)</th>
+                  <th style="width: 100px;">Voucher No</th>
+                  <th>Payment Method & Account</th>
+                  <th style="width: 110px;">Cheque / Ref No</th>
+                  <th style="width: 95px; text-align: right;">Amount (रू)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${bill.installments.map((inst: any, idx: number) => `
+                  <tr>
+                    <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+                    <td style="font-family: monospace; font-weight: bold;">${inst.expenseDateBs}</td>
+                    <td style="font-family: monospace; font-weight: bold; color: #1e3a5f;">${inst.voucherNo || `VOUCH-${inst.id}`}</td>
+                    <td>${inst.paymentMedium} ${inst.paidFromAccount ? `<span style="color: #666; font-size: 10px;">(${inst.paidFromAccount})</span>` : ''}</td>
+                    <td style="font-family: monospace; font-weight: bold; color: #6b21a8;">${inst.chequeNo || '—'}</td>
+                    <td style="text-align: right; font-family: monospace; font-weight: bold; color: #15803d;">रू ${(inst.amount || 0).toLocaleString()}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div style="margin-bottom: 20px; font-size: 11px; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">
+              <div><strong>Narration / Settlement Remarks:</strong> ${bill.description || 'Bill installment disbursement and account settlement'}</div>
+              <div><strong>Final Status:</strong> ${isFullyPaid ? 'बिल भुक्तानी पूर्ण रूपमा चुक्ता भएको छ (All dues settled).' : 'आंशिक भुक्तानी भएको र बाँकी रकम तिर्न बाँकी रहेको छ।'}</div>
+            </div>
+
+            <div class="footer-sig">
+              <div class="sig-box">Prepared By (लेखापाल)</div>
+              <div class="sig-box">Checked By (जाँच गर्ने)</div>
+              <div class="sig-box">Approved By (प्रधानाध्यापक)</div>
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() { setTimeout(function() { window.print(); }, 400); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
+  // ── 3.5 PRINT CONSOLIDATED PAYABLES & VENDOR DUES STATEMENT (सम्पूर्ण दायित्व प्रतिवेदन) ──
+  const triggerConsolidatedPayablesPrint = (dataPayload: any) => {
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      window.print();
+      return;
+    }
+
+    const sNameNp = schoolProfile?.schoolNameNepali || schoolProfile?.schoolName || 'बृन्दावन पब्लिक स्कूल';
+    const sNameEn = schoolProfile?.schoolName || 'Brindawan Public School';
+    const sAddress = schoolProfile?.address || 'विश्रामपुर, रौतहट';
+    const sPan = schoolProfile?.panNo ? `PAN: ${schoolProfile.panNo}` : '';
+    const sEmis = schoolProfile?.emisCode ? `EMIS: ${schoolProfile.emisCode}` : '';
+
+    const summary = dataPayload?.summary || {
+      totalPayables: totalPayableAmount,
+      totalPaid: totalSettledAmount,
+      totalOutstandingDue: totalOutstandingDue,
+      totalBillsCount: displayedBills.length,
+      pendingBillsCount: displayedBills.filter((b: any) => b.remainingDue > 0).length,
+    };
+    const billsList = dataPayload?.bills || displayedBills || [];
+    const partySummaryList = dataPayload?.partySummary || [];
+
+    const activeFyName = effectiveFYId
+      ? (financialYearsData?.find((f: any) => String(f.id) === String(effectiveFYId))?.year || 'आ.व. छनौट')
+      : 'सबै आर्थिक वर्षहरू (All Fiscal Years)';
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>सम्पूर्ण पार्टी तिर्न बाँकी दायित्व प्रतिवेदन - ${sNameNp}</title>
+          <style>
+            @page { size: A4 landscape; margin: 8mm; }
+            * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; margin: 0; padding: 0; background: #fff; color: #111; font-size: 10px; }
+            .container { padding: 10px; }
+            .header { text-align: center; border-bottom: 2px solid #1e3a5f; padding-bottom: 6px; margin-bottom: 10px; }
+            .school-name { font-size: 18px; font-weight: 900; color: #1e3a5f; margin: 2px 0; }
+            .badge { font-size: 11px; font-weight: 900; background: #fdf2f8; color: #9d174d; display: inline-block; padding: 3px 12px; border-radius: 4px; border: 1px solid #fbcfe8; margin-top: 3px; text-transform: uppercase; }
+            .meta-bar { display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; margin-bottom: 10px; }
+            .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+            .kpi-card { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; }
+            .kpi-title { font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; }
+            .kpi-val { font-size: 14px; font-weight: 900; margin-top: 3px; font-family: monospace; }
+            .sec-title { font-size: 10.5px; font-weight: 900; color: #1e3a5f; text-transform: uppercase; margin: 12px 0 5px 0; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid #1e3a5f; padding-left: 6px; }
+            table { width: 100%; border-collapse: collapse; font-size: 9px; margin-bottom: 12px; }
+            th { background: #1e3a5f; color: #fff; padding: 5px 6px; text-align: left; font-size: 8.5px; border: 1px solid #1e3a5f; text-transform: uppercase; }
+            td { padding: 4px 6px; border: 1px solid #cbd5e1; vertical-align: top; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .inst-badge { display: inline-block; background: #f3e8ff; color: #6b21a8; font-size: 8px; font-weight: bold; padding: 1px 4px; border-radius: 3px; margin: 1px; }
+            .fy-badge { display: inline-block; background: #dbeafe; color: #1e40af; font-size: 8px; font-weight: bold; padding: 1px 4px; border-radius: 3px; }
+            .footer-sig { margin-top: 35px; display: flex; justify-content: space-between; font-size: 9.5px; font-weight: 700; page-break-inside: avoid; }
+            .sig-box { width: 180px; text-align: center; border-top: 1px solid #333; padding-top: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="school-name">${sNameNp}</div>
+              <div style="font-size: 11px; font-weight: bold; color: #4b5563;">${sNameEn}, ${sAddress} ${sPan ? ` | ${sPan}` : ''} ${sEmis ? ` | ${sEmis}` : ''}</div>
+              <div class="badge">सम्पूर्ण पार्टी तिर्न बाँकी दायित्व प्रतिवेदन (CONSOLIDATED ACCOUNTS PAYABLE & VENDOR DUES STATEMENT)</div>
+            </div>
+
+            <div class="meta-bar">
+              <div>आर्थिक वर्ष दायरा: <strong>${activeFyName}</strong></div>
+              <div>प्रतिवेदन मिति: <strong>${todayBS()} BS</strong></div>
+              <div>दर्ता बिल संख्या: <strong>${summary.totalBillsCount || billsList.length}</strong></div>
+              <div>बक्यौता बाँकी संख्या: <strong style="color: #b91c1c;">${summary.pendingBillsCount || 0}</strong></div>
+            </div>
+
+            <div class="kpi-grid">
+              <div class="kpi-card" style="border-top: 3px solid #1e3a5f;">
+                <div class="kpi-title">कुल दर्ता बिल दायित्व (Total Billed)</div>
+                <div class="kpi-val" style="color: #1e3a5f;">रू ${(summary.totalPayables || 0).toLocaleString()}</div>
+              </div>
+              <div class="kpi-card" style="border-top: 3px solid #16a34a;">
+                <div class="kpi-title">हालसम्म भुक्तान/चुक्ता (Total Settled)</div>
+                <div class="kpi-val" style="color: #16a34a;">रू ${(summary.totalPaid || 0).toLocaleString()}</div>
+              </div>
+              <div class="kpi-card" style="border-top: 3px solid #dc2626;">
+                <div class="kpi-title">खुद तिर्न बाँकी बक्यौता (Outstanding Dues)</div>
+                <div class="kpi-val" style="color: #dc2626;">रू ${(summary.totalOutstandingDue || 0).toLocaleString()}</div>
+              </div>
+              <div class="kpi-card" style="border-top: 3px solid #9333ea;">
+                <div class="kpi-title">चुक्ता दर (Settlement Rate)</div>
+                <div class="kpi-val" style="color: #9333ea;">
+                  ${summary.totalPayables ? Math.round(((summary.totalPaid || 0) / summary.totalPayables) * 100) : 100}%
+                </div>
+              </div>
+            </div>
+
+            <!-- PART 1: Party-Wise Summary -->
+            <div class="sec-title">
+              <span>खण्ड १: पार्टीगत दायित्व सारांश (Party-wise Liability Summary)</span>
+              <span style="font-size: 8.5px; color: #64748b; font-weight: normal;">(प्रत्येक विक्रेता/आपूर्तिकर्ताको कुल हिसाब)</span>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 25px;" class="text-center">क्र.सं.</th>
+                  <th>पार्टी / विक्रेताको नाम (Party Name)</th>
+                  <th style="width: 80px;">PAN/VAT</th>
+                  <th style="width: 80px;">सम्पर्क फोन</th>
+                  <th style="width: 60px;" class="text-center">बिल संख्या</th>
+                  <th style="width: 95px;" class="text-right">कुल बिल रकम (रू)</th>
+                  <th style="width: 95px;" class="text-right">हालसम्म भुक्तान (रू)</th>
+                  <th style="width: 100px;" class="text-right">तिर्न बाँकी बक्यौता (रू)</th>
+                  <th style="width: 90px;" class="text-center">स्थिति</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${partySummaryList.length === 0 ? `
+                  <tr>
+                    <td colspan="9" class="text-center" style="padding: 12px; color: #94a3b8;">कुनै पार्टी विवरण उपलब्ध छैन।</td>
+                  </tr>
+                ` : partySummaryList.map((p: any, idx: number) => `
+                  <tr>
+                    <td class="text-center font-mono">${idx + 1}</td>
+                    <td><strong>${p.partyName}</strong> ${p.party?.nameNepali ? `(${p.party.nameNepali})` : ''}</td>
+                    <td class="font-mono">${p.panNo || '—'}</td>
+                    <td class="font-mono">${p.phone || '—'}</td>
+                    <td class="text-center font-mono font-bold">${p.totalBillsCount}</td>
+                    <td class="text-right font-mono font-bold">रू ${(p.totalBillsAmount || 0).toLocaleString()}</td>
+                    <td class="text-right font-mono font-bold" style="color: #16a34a;">रू ${(p.totalPaidAmount || 0).toLocaleString()}</td>
+                    <td class="text-right font-mono font-black" style="color: ${p.totalOutstandingDue > 0 ? '#dc2626' : '#16a34a'};">
+                      रू ${(p.totalOutstandingDue || 0).toLocaleString()}
+                    </td>
+                    <td class="text-center">
+                      <span style="font-weight: bold; font-size: 8px; color: ${p.totalOutstandingDue > 0 ? '#b45309' : '#15803d'};">
+                        ${p.totalOutstandingDue > 0 ? `⏳ बाँकी (${p.pendingBillsCount} बिल)` : '✓ पूर्ण चुक्ता'}
+                      </span>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr style="background: #f1f5f9; font-weight: 900;">
+                  <td colspan="5" class="text-right uppercase">जम्मा कुल दायित्व (Total Liability):</td>
+                  <td class="text-right font-mono font-black">रू ${(summary.totalPayables || 0).toLocaleString()}</td>
+                  <td class="text-right font-mono font-black" style="color: #16a34a;">रू ${(summary.totalPaid || 0).toLocaleString()}</td>
+                  <td class="text-right font-mono font-black" style="color: #dc2626;">रू ${(summary.totalOutstandingDue || 0).toLocaleString()}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <!-- PART 2: Detailed Bills Breakdown -->
+            <div class="sec-title">
+              <span>खण्ड २: विस्तृत बिल तथा बहु-वर्षीय किस्ता भुक्तानी अभिलेख (Detailed Bills & Multi-Year Installments)</span>
+              <span style="font-size: 8.5px; color: #64748b; font-weight: normal;">(उत्पत्तिको आ.व. र विभिन्न आ.व.मा भएका किस्ता भुक्तानीहरू)</span>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 25px;" class="text-center">#</th>
+                  <th style="width: 85px;">बिल नं. र मिति</th>
+                  <th style="width: 65px;">दर्ता आ.व.</th>
+                  <th style="width: 110px;">पार्टी / विक्रेता</th>
+                  <th style="width: 90px;">खर्च शीर्षक</th>
+                  <th style="width: 85px;" class="text-right">कुल बिल (रू)</th>
+                  <th>किस्ता भुक्तानी विवरण (मिति, भौचर, भुक्तानी आ.व., माध्यम, रकम)</th>
+                  <th style="width: 85px;" class="text-right">भुक्तान (रू)</th>
+                  <th style="width: 85px;" class="text-right">बाँकी (रू)</th>
+                  <th style="width: 60px;" class="text-center">स्थिति</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${billsList.length === 0 ? `
+                  <tr>
+                    <td colspan="10" class="text-center" style="padding: 12px; color: #94a3b8;">कुनै बिल दर्ता भएको छैन।</td>
+                  </tr>
+                ` : billsList.map((bill: any, idx: number) => `
+                  <tr>
+                    <td class="text-center font-mono">${idx + 1}</td>
+                    <td>
+                      <strong class="font-mono" style="color: #1e3a5f;">${bill.billNo}</strong>
+                      <div style="font-size: 8px; color: #64748b; font-family: monospace;">${bill.billDateBs}</div>
+                    </td>
+                    <td>
+                      <span class="fy-badge">आ.व. ${bill.billFinancialYear || '—'}</span>
+                    </td>
+                    <td>
+                      <strong>${bill.partyName}</strong>
+                      ${bill.panNo ? `<div style="font-size: 8px; color: #64748b;">PAN: ${bill.panNo}</div>` : ''}
+                    </td>
+                    <td>${bill.headName}</td>
+                    <td class="text-right font-mono font-bold">रू ${(bill.totalBillAmount || 0).toLocaleString()}</td>
+                    <td>
+                      ${bill.installments?.length === 0 ? '<span style="color: #94a3b8;">कुनै किस्ता भुक्तान भएको छैन</span>' : (
+                        bill.installments.map((inst: any, iIdx: number) => `
+                          <div style="font-size: 8px; margin-bottom: 2px;">
+                            <strong>किस्ता ${iIdx + 1}:</strong> ${inst.expenseDateBs} (${inst.voucherNo || `V-${inst.id}`})
+                            <span class="inst-badge">भुक्तानी: आ.व. ${inst.financialYear || '—'}</span>
+                            <span style="color: #475569;">[${inst.paymentMedium}${inst.chequeNo ? ` Chk:${inst.chequeNo}` : ''}]</span>
+                            <strong style="color: #16a34a; font-family: monospace;">रू ${(inst.amount || 0).toLocaleString()}</strong>
+                          </div>
+                        `).join('')
+                      )}
+                    </td>
+                    <td class="text-right font-mono font-bold" style="color: #16a34a;">
+                      रू ${(bill.totalPaidAmount || 0).toLocaleString()}
+                    </td>
+                    <td class="text-right font-mono font-black" style="color: ${bill.remainingDue > 0 ? '#dc2626' : '#16a34a'};">
+                      रू ${(bill.remainingDue || 0).toLocaleString()}
+                    </td>
+                    <td class="text-center">
+                      <span style="font-size: 8px; font-weight: bold; color: ${
+                        bill.status === 'FULLY_PAID' ? '#15803d' : bill.status === 'PARTIAL' ? '#b45309' : '#dc2626'
+                      };">
+                        ${bill.status === 'FULLY_PAID' ? '✓ चुक्ता' : bill.status === 'PARTIAL' ? '⚡ आंशिक' : '⏳ बाँकी'}
+                      </span>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div class="footer-sig">
+              <div class="sig-box">
+                <div>तयार गर्ने (लेखापाल)</div>
+                <div style="margin-top: 25px; font-size: 8.5px; color: #64748b;">हस्ताक्षर र मिति</div>
+              </div>
+              <div class="sig-box">
+                <div>जाँच गर्ने (लेखा समिति / आन्तरिक परीक्षक)</div>
+                <div style="margin-top: 25px; font-size: 8.5px; color: #64748b;">हस्ताक्षर र मिति</div>
+              </div>
+              <div class="sig-box">
+                <div>स्वीकृत गर्ने (प्रधानाध्यापक / अध्यक्ष)</div>
+                <div style="margin-top: 25px; font-size: 8.5px; color: #64748b;">हस्ताक्षर र मिति</div>
+              </div>
+            </div>
+          </div>
+
+          <script>
+            window.onload = function() { setTimeout(function() { window.print(); }, 400); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWin.document.close();
+  };
+
+  // ── 4. ACCOUNTS PAYABLE BILLS AGGREGATION ──────────────────────────────────
+  const entries = entriesData?.data || [];
+  const totalAmount = entriesData?.totalAmount || 0;
+
+  const payableBillsMap = new Map<string, any>();
+  entries.forEach((e: any) => {
+    if (e.billNo) {
+      const key = `${e.partyId || 'direct'}_${e.billNo.trim()}`;
+      if (!payableBillsMap.has(key)) {
+        let parsedTotal = e.amount || 0;
+        const match = (e.description || '').match(/\[Total Bill:\s*(?:Rs\.|रू)?\s*([\d,]+)\]/i) || (e.remarks || '').match(/\[Total Bill:\s*(?:Rs\.|रू)?\s*([\d,]+)\]/i);
+        if (match) {
+          parsedTotal = parseFloat(match[1].replace(/,/g, '')) || e.amount;
+        }
+
+        payableBillsMap.set(key, {
+          key,
+          billNo: e.billNo,
+          billDateBs: e.expenseDateBs,
+          billFinancialYear: e.financialYear?.year || getFiscalYearFromBS(e.expenseDateBs),
+          billFinancialYearId: e.financialYearId,
+          partyId: e.partyId,
+          party: e.party,
+          partyName: e.party?.name || e.paidTo || 'Vendor / Supplier',
+          panNo: e.party?.panNo || '',
+          headId: e.headId,
+          head: e.head,
+          headName: e.head?.name || 'Expense Head',
+          totalBillAmount: parsedTotal,
+          totalPaidAmount: 0,
+          description: e.description,
+          installments: [],
+        });
+      }
+
+      const bill = payableBillsMap.get(key);
+      bill.totalPaidAmount += (e.amount || 0);
+      if (bill.totalPaidAmount > bill.totalBillAmount) {
+        bill.totalBillAmount = bill.totalPaidAmount;
+      }
+      bill.installments.push({
+        ...e,
+        financialYear: e.financialYear?.year || getFiscalYearFromBS(e.expenseDateBs),
+      });
+    }
+  });
+
+  const localPayableBills = Array.from(payableBillsMap.values()).map((b: any) => {
+    const remainingDue = Math.max(0, b.totalBillAmount - b.totalPaidAmount);
+    let status: 'FULLY_PAID' | 'PARTIAL' | 'UNPAID' = 'FULLY_PAID';
+    if (remainingDue > 0 && b.totalPaidAmount > 0) status = 'PARTIAL';
+    else if (b.totalPaidAmount === 0 || remainingDue === b.totalBillAmount) status = 'UNPAID';
+    return {
+      ...b,
+      remainingDue,
+      status,
+    };
+  });
+
+  // Prefer backend-aggregated payables data when available, with fallback
+  const displayedBills: any[] = payablesData?.bills || localPayableBills;
+  const totalPayableAmount = payablesData?.summary?.totalPayables ?? localPayableBills.reduce((s: number, b: any) => s + b.totalBillAmount, 0);
+  const totalSettledAmount = payablesData?.summary?.totalPaid ?? localPayableBills.reduce((s: number, b: any) => s + b.totalPaidAmount, 0);
+  const totalOutstandingDue = payablesData?.summary?.totalOutstandingDue ?? localPayableBills.reduce((s: number, b: any) => s + b.remainingDue, 0);
+
+  const handleRecordBillSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!billNo || !billTotalAmount) {
+      toast.error('Please enter Bill No and Total Bill Amount.');
+      return;
+    }
+
+    const partyObj = partiesData?.find((p: any) => p.id.toString() === billPartyId);
+    const initialPaidNum = parseFloat(billInitialPaid || '0');
+    const totalBillNum = parseFloat(billTotalAmount);
+
+    const resolvedFYId = billFinancialYearId
+      ? parseInt(billFinancialYearId)
+      : (autoResolvedBillFY?.id || activeFinancialYear?.id || 1);
+
+    const payload: any = {
+      financialYearId: resolvedFYId,
+      headId: billHeadId ? parseInt(billHeadId) : (headsData?.[0]?.id || 1),
+      amount: initialPaidNum,
+      expenseDateBs: billDateBs || todayBS(),
+      billNo: billNo.trim(),
+      partyId: billPartyId ? parseInt(billPartyId) : null,
+      paidTo: partyObj ? partyObj.name : 'Vendor / Supplier',
+      paymentMedium: initialPaidNum > 0 ? billPaymentMedium : 'CASH',
+      description: `${billDescription || 'Vendor Purchase Bill'} [Total Bill: Rs. ${totalBillNum.toLocaleString()}]`,
+      remarks: initialPaidNum > 0 ? `Initial installment of Rs. ${initialPaidNum.toLocaleString()}` : 'Bill registered pending payment',
+      approvedBy: 'Principal (प्रधानाध्यापक)',
+    };
+
+    if (initialPaidNum > 0) {
+      if (billPaymentMedium === 'CASH') {
+        payload.bankAccountId = null;
+        payload.paidFromAccount = 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)';
+        payload.chequeNo = null;
+        payload.chequePayeeName = null;
+      } else {
+        if (billBankAccountId) {
+          const bObj = bankAccountsData?.find((b: any) => b.id.toString() === billBankAccountId);
+          if (bObj) {
+            payload.bankAccountId = bObj.id;
+            payload.paidFromAccount = `${bObj.bankName} (${bObj.accountNo})`;
+          }
+        }
+        if ((billPaymentMedium === 'CHEQUE' || billPaymentMedium === 'BANK_TRANSFER') && billChequeNo) {
+          payload.chequeNo = billChequeNo;
+          payload.chequePayeeName = partyObj ? partyObj.name : null;
+        }
+      }
+    }
+
+    addExpenseMutation.mutate(payload, {
+      onSuccess: () => {
+        toast.success('बिल दर्ता भयो! (सोही पार्टी/शीर्षकमा थप बिल दर्ता गर्न सक्नुहुन्छ वा बन्द गर्न Cancel थिच्नुहोस्)');
+        // Continuous data entry mode: retain Party, Topic, Date & Fiscal Year; reset bill-specific amounts & no
+        setBillNo('');
+        setBillTotalAmount('');
+        setBillInitialPaid('');
+        setBillChequeNo('');
+        setBillDescription('');
+        queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+      }
+    });
+  };
+
+  const handlePayInstallmentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPayableBill || !instAmount) {
+      toast.error('Please enter installment payment amount.');
+      return;
+    }
+
+    const instNum = parseFloat(instAmount);
+    if (isNaN(instNum) || instNum <= 0) {
+      toast.error('Please enter a valid amount.');
+      return;
+    }
+
+    const resolvedFYId = instFinancialYearId
+      ? parseInt(instFinancialYearId)
+      : (autoResolvedInstFY?.id || activeFinancialYear?.id || 1);
+
+    const targetHeadId = selectedPayableBill.headId || (headsData?.[0]?.id || 1);
+
+    if (isInstSplitPayment) {
+      const cashAmt = parseFloat(instSplitCashAmount || '0');
+      const bankAmt = parseFloat(instSplitBankAmount || '0');
+      if (Math.abs((cashAmt + bankAmt) - instNum) > 0.01) {
+        toast.error(`मिश्रित भुक्तानीको कुल जोड किस्ता रकमसँग मिल्नुपर्छ (Cash Rs. ${cashAmt} + Bank Rs. ${bankAmt} != Total Rs. ${instNum}).`);
+        return;
+      }
+
+      try {
+        if (cashAmt > 0) {
+          await api.post('/expense/entries', {
+            financialYearId: resolvedFYId,
+            headId: targetHeadId,
+            amount: cashAmt,
+            expenseDateBs: instDateBs || todayBS(),
+            expenseDateAd: new Date().toISOString().slice(0, 10),
+            billNo: selectedPayableBill.billNo,
+            partyId: selectedPayableBill.partyId || null,
+            paidTo: selectedPayableBill.partyName || 'Vendor / Supplier',
+            paymentMedium: 'CASH',
+            paidFromAccount: 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)',
+            description: `Installment for Bill ${selectedPayableBill.billNo} [Cash Portion 1/2]`,
+            remarks: instRemarks || `Cash payment of Rs. ${cashAmt.toLocaleString()}`,
+            approvedBy: 'Principal (प्रधानाध्यापक)',
+          });
+        }
+
+        if (bankAmt > 0) {
+          let paidFromAcc = 'School Operational Account';
+          if (instSplitBankAccountId) {
+            const bObj = bankAccountsData?.find((b: any) => b.id.toString() === instSplitBankAccountId);
+            if (bObj) paidFromAcc = `${bObj.bankName} (${bObj.accountNo})`;
+          }
+
+          await api.post('/expense/entries', {
+            financialYearId: resolvedFYId,
+            headId: targetHeadId,
+            amount: bankAmt,
+            expenseDateBs: instDateBs || todayBS(),
+            expenseDateAd: new Date().toISOString().slice(0, 10),
+            billNo: selectedPayableBill.billNo,
+            partyId: selectedPayableBill.partyId || null,
+            paidTo: selectedPayableBill.partyName || 'Vendor / Supplier',
+            paymentMedium: 'CHEQUE',
+            bankAccountId: instSplitBankAccountId ? parseInt(instSplitBankAccountId) : undefined,
+            paidFromAccount: paidFromAcc,
+            chequeNo: instSplitChequeNo || null,
+            chequePayeeName: instChequePayeeName || selectedPayableBill.partyName,
+            description: `Installment for Bill ${selectedPayableBill.billNo} [Cheque/Bank Portion 2/2]`,
+            remarks: instRemarks || `Bank payment of Rs. ${bankAmt.toLocaleString()}`,
+            approvedBy: 'Principal (प्रधानाध्यापक)',
+          });
+        }
+
+        toast.success(`किस्ता रकम रू ${instNum.toLocaleString()} (नगद + बैंक) भुक्तानी सफल भयो!`);
+        setIsPayInstallmentModalOpen(false);
+        queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+        queryClient.invalidateQueries({ queryKey: ['expense-entries'] });
+        setSelectedPayableBill(null);
+        setInstAmount('');
+        setInstSplitCashAmount('');
+        setInstSplitBankAmount('');
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || 'Failed to pay installment');
+      }
+    } else {
+      const payload: any = {
+        financialYearId: resolvedFYId,
+        headId: targetHeadId,
+        amount: instNum,
+        expenseDateBs: instDateBs || todayBS(),
+        billNo: selectedPayableBill.billNo,
+        partyId: selectedPayableBill.partyId || null,
+        paidTo: selectedPayableBill.partyName || 'Vendor / Supplier',
+        paymentMedium: instPaymentMedium,
+        voucherNo: instVoucherNo || undefined,
+        description: `Installment Payment for Bill ${selectedPayableBill.billNo} [Total Bill: Rs. ${selectedPayableBill.totalBillAmount.toLocaleString()}]`,
+        remarks: instRemarks || `Installment payment of Rs. ${instNum.toLocaleString()}`,
+        approvedBy: 'Principal (प्रधानाध्यापक)',
+      };
+
+      if (instPaymentMedium === 'CASH') {
+        payload.bankAccountId = null;
+        payload.paidFromAccount = 'विद्यालय नगद खाता (School Cash / Petty Cash A/c)';
+        payload.chequeNo = null;
+        payload.chequePayeeName = null;
+      } else {
+        if (instBankAccountId) {
+          const bObj = bankAccountsData?.find((b: any) => b.id.toString() === instBankAccountId);
+          if (bObj) {
+            payload.bankAccountId = bObj.id;
+            payload.paidFromAccount = `${bObj.bankName} (${bObj.accountNo})`;
+          }
+        }
+
+        if (instPaymentMedium === 'CHEQUE' || instPaymentMedium === 'BANK_TRANSFER') {
+          payload.chequeNo = instChequeNo || null;
+          payload.chequePayeeName = instChequePayeeName || selectedPayableBill.partyName;
+        }
+      }
+
+      addExpenseMutation.mutate(payload, {
+        onSuccess: () => {
+          toast.success(`Installment of Rs. ${instNum.toLocaleString()} paid!`);
+          setIsPayInstallmentModalOpen(false);
+          queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+          setSelectedPayableBill(null);
+          setInstAmount('');
+          setInstChequeNo('');
+          setInstChequePayeeName('');
+          setInstVoucherNo('');
+          setInstRemarks('');
+        }
+      });
+    }
+  };
+
+  const handlePayVendorLumpSumSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lumpSumPartyId) {
+      toast.error('कृपया भुक्तानी पाउने पार्टी/सप्लायर छनौट गर्नुहोस् (Please select a vendor/party).');
+      return;
+    }
+    if (!lumpSumTotalAmount || parseFloat(lumpSumTotalAmount) <= 0) {
+      toast.error('कृपया मान्य भुक्तानी रकम प्रविष्टि गर्नुहोस् (Please enter valid payment amount).');
+      return;
+    }
+
+    const partyObj = partiesData?.find((p: any) => p.id.toString() === lumpSumPartyId);
+    const resolvedFYId = lumpSumFinancialYearId
+      ? parseInt(lumpSumFinancialYearId)
+      : (autoResolvedLumpSumFY?.id || activeFinancialYear?.id || 1);
+    const totalPayAmt = parseFloat(lumpSumTotalAmount);
+
+    if (isLumpSumSplit) {
+      const cashAmt = parseFloat(lumpSumSplitCashAmount || '0');
+      const bankAmt = parseFloat(lumpSumSplitBankAmount || '0');
+      if (Math.abs((cashAmt + bankAmt) - totalPayAmt) > 0.01) {
+        toast.error(`मिश्रित भुक्तानीको योगफल कुल रकमसँग मिल्नुपर्छ (Cash Rs. ${cashAmt} + Bank Rs. ${bankAmt} != Total Rs. ${totalPayAmt}).`);
+        return;
+      }
+    }
+
+    try {
+      const payload: any = {
+        amount: totalPayAmt,
+        financialYearId: resolvedFYId,
+        expenseDateBs: lumpSumDateBs || todayBS(),
+        remarks: lumpSumRemarks || `Lump-sum settlement payment for ${partyObj?.name}`,
+        voucherNo: lumpSumVoucherNo || undefined,
+        isSplit: isLumpSumSplit,
+      };
+
+      if (isLumpSumSplit) {
+        payload.cashAmount = parseFloat(lumpSumSplitCashAmount || '0');
+        payload.bankAmount = parseFloat(lumpSumSplitBankAmount || '0');
+        payload.splitBankAccountId = lumpSumSplitBankAccountId ? parseInt(lumpSumSplitBankAccountId) : undefined;
+        payload.splitChequeNo = lumpSumSplitChequeNo || undefined;
+        payload.chequePayeeName = lumpSumChequePayeeName || partyObj?.name;
+      } else {
+        payload.paymentMedium = lumpSumPaymentMedium;
+        if (lumpSumPaymentMedium !== 'CASH') {
+          payload.bankAccountId = lumpSumBankAccountId ? parseInt(lumpSumBankAccountId) : undefined;
+          payload.chequeNo = lumpSumChequeNo || undefined;
+          payload.chequePayeeName = lumpSumChequePayeeName || partyObj?.name;
+        }
+      }
+
+      const res = await api.post(`/parties/${lumpSumPartyId}/settle-lump-sum`, payload);
+
+      toast.success(res.data?.message || `पार्टी बक्यौता भुक्तानी रू ${totalPayAmt.toLocaleString()} सुरक्षित भयो!`);
+      setIsPayVendorLumpSumOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['expense-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['parties-list'] });
+      queryClient.invalidateQueries({ queryKey: ['parties-all'] });
+      setLumpSumTotalAmount('');
+      setLumpSumSplitCashAmount('');
+      setLumpSumSplitBankAmount('');
+      setLumpSumRemarks('');
+      setLumpSumChequeNo('');
+      setLumpSumSplitChequeNo('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to record lump-sum settlement.');
+    }
+  };
+
+
+  const handleOpenEditPayable = (bill: any) => {
+    setEditingPayableBill(bill);
+    setEditPayBillNo(bill.billNo || '');
+    setEditPayBillDateBs(bill.billDateBs || todayBS());
+    setEditPayBillPartyId(bill.partyId ? bill.partyId.toString() : '');
+    setEditPayBillHeadId(bill.headId ? bill.headId.toString() : '');
+    setEditPayBillTotalAmount(bill.totalBillAmount ? bill.totalBillAmount.toString() : '');
+    const cleanDesc = (bill.description || '').replace(/\[Total Bill:\s*[^\]]+\]/i, '').trim();
+    setEditPayBillDescription(cleanDesc);
+  };
+
+  const handleSaveEditPayable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayableBill) return;
+
+    const newTotal = parseFloat(editPayBillTotalAmount);
+    if (isNaN(newTotal) || newTotal < 0) {
+      toast.error('Please enter a valid total bill amount.');
+      return;
+    }
+
+    const partyObj = partiesData?.find((p: any) => p.id.toString() === editPayBillPartyId);
+    const newPartyName = partyObj ? partyObj.name : editingPayableBill.partyName;
+    const cleanDesc = editPayBillDescription ? editPayBillDescription.trim() : 'Vendor Purchase Bill';
+    const finalDescription = `${cleanDesc} [Total Bill: Rs. ${newTotal.toLocaleString()}]`;
+
+    try {
+      await Promise.all(
+        editingPayableBill.installments.map((inst: any, idx: number) => {
+          const updatePayload: any = {
+            billNo: editPayBillNo.trim(),
+            headId: editPayBillHeadId ? parseInt(editPayBillHeadId) : inst.headId,
+            partyId: editPayBillPartyId ? parseInt(editPayBillPartyId) : null,
+            paidTo: newPartyName,
+            description: finalDescription,
+          };
+          if (idx === 0 && editPayBillDateBs) {
+            updatePayload.expenseDateBs = editPayBillDateBs;
+          }
+          return api.put(`/expense/entries/${inst.id}`, updatePayload);
+        })
+      );
+
+      toast.success(`Bill "${editPayBillNo}" details updated successfully!`);
+      setEditingPayableBill(null);
+      queryClient.invalidateQueries({ queryKey: ['expense-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update bill details.');
+    }
+  };
+
+  const handleDeletePayable = async (bill: any) => {
+    if (!bill || !bill.installments || bill.installments.length === 0) return;
+
+    const count = bill.installments.length;
+    const confirmMsg = count > 1
+      ? `Are you sure you want to delete Bill "${bill.billNo}" and all its ${count} payment entries? This will delete these expense entries permanently.`
+      : `Are you sure you want to delete Bill "${bill.billNo}"? This action cannot be undone.`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsDeletingBill(true);
+    try {
+      await Promise.all(
+        bill.installments.map((inst: any) => api.post(`/expense/entries/${inst.id}/delete`))
+      );
+      toast.success(`Bill "${bill.billNo}" deleted successfully!`);
+      queryClient.invalidateQueries({ queryKey: ['expense-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['payables-summary'] });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to delete bill.');
+    } finally {
+      setIsDeletingBill(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 pb-16">
+      {/* ─── 1. PAGE HEADER ───────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl md:text-2xl font-extrabold text-[#1e3a5f]">
+            Expense & Voucher Management (खर्च तथा भुक्तानी व्यवस्थापन)
+          </h1>
+          <p className="text-xs text-gray-500 font-nepali mt-0.5">
+            नेपाल सरकार दोहोरो लेखा प्रणाली, खर्च शीर्षक कोड, किस्ता भुक्तानी (Accounts Payable), बैंक/चेक र पाउने व्यक्ति/संस्था लेजर
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setIsAddPartyModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3.5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 shadow-2xs transition"
+          >
+            <Users size={14} className="text-[#1e3a5f]" />
+            <span>+ Add Party (पाउने पक्ष)</span>
+          </button>
+
+          <button
+            onClick={() => setIsRecordBillModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-purple-300 bg-purple-50 px-3.5 py-2 text-xs font-bold text-purple-900 hover:bg-purple-100 shadow-2xs transition"
+          >
+            <CreditCard size={14} className="text-purple-700" />
+            <span>+ Record Bill / Payable (बिल दर्ता)</span>
+          </button>
+
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 shadow-2xs transition"
+          >
+            <Plus size={14} />
+            <span>Record Expense (खर्च प्रविष्टि)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ─── TAB SWITCHER: ALL EXPENSES vs ACCOUNTS PAYABLE ───────────────────── */}
+      <div className="flex items-center gap-2 border-b border-gray-200 pb-1">
+        <button
+          onClick={() => setActiveTab('ALL_EXPENSES')}
+          className={`px-4 py-2.5 text-xs font-extrabold rounded-t-xl transition flex items-center gap-2 border-b-2 ${
+            activeTab === 'ALL_EXPENSES'
+              ? 'border-[#1e3a5f] text-[#1e3a5f] bg-slate-100/70'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-slate-50'
+          }`}
+        >
+          <Receipt size={15} />
+          <span>All Expense Vouchers (खर्च तथा भुक्तानी भौचरहरू)</span>
+          <span className="rounded-full bg-[#1e3a5f] text-white px-2 py-0.5 text-[10px] font-mono">
+            {entries.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('ACCOUNTS_PAYABLE')}
+          className={`px-4 py-2.5 text-xs font-extrabold rounded-t-xl transition flex items-center gap-2 border-b-2 ${
+            activeTab === 'ACCOUNTS_PAYABLE'
+              ? 'border-purple-700 text-purple-900 bg-purple-50/70'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-slate-50'
+          }`}
+        >
+          <CreditCard size={15} />
+          <span>Accounts Payable & Bill Installments (भुक्तानी गर्न बाँकी हिसाब तथा किस्ता)</span>
+          <span className="rounded-full bg-purple-700 text-white px-2 py-0.5 text-[10px] font-mono">
+            {displayedBills.length}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === 'ALL_EXPENSES' ? (
+        <>
+          {/* ─── 2. SUMMARY METRIC CARDS ───────────────────────────────────────────── */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-2xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                Total Expenses ({selectedYearFilter === 'ALL' ? 'सबै आर्थिक वर्षहरू' : `आ.व. ${financialYearsData?.find((f: any) => f.id.toString() === effectiveFYId)?.year || activeFinancialYear?.year || '२०८३/८४'}`})
+              </span>
+              <p className="text-2xl font-extrabold text-rose-700 mt-2">रू {totalAmount.toLocaleString()}</p>
+              <p className="text-[11px] text-gray-400 mt-1">कुल निकासा भएको खर्च रकम</p>
+            </div>
+
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-2xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Staff Salary & Allowances</span>
+              <p className="text-2xl font-extrabold text-[#1e3a5f] mt-2">
+                रू {entries
+                  .filter((e: any) => e.head?.category?.name?.includes('Salary') || e.head?.name?.includes('Salary') || e.head?.code?.startsWith('5'))
+                  .reduce((s: number, e: any) => s + (e.amount || 0), 0)
+                  .toLocaleString()}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-1">शिक्षक/कर्मचारी तलब तथा संचय कोष</p>
+            </div>
+
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-2xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Operational & Maintenance</span>
+              <p className="text-2xl font-extrabold text-amber-600 mt-2">
+                रू {entries
+                  .filter((e: any) => !e.head?.name?.includes('Salary'))
+                  .reduce((s: number, e: any) => s + (e.amount || 0), 0)
+                  .toLocaleString()}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-1">स्टेशनरी, मर्मत, बिजुली, पानी तथा अन्य</p>
+            </div>
+
+            <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-2xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Registered Parties / Vendors</span>
+              <p className="text-2xl font-extrabold text-emerald-700 mt-2">{partiesData?.length || 0}</p>
+              <p className="text-[11px] text-gray-400 mt-1">सूचीकृत पाउने व्यक्ति/संस्था</p>
+            </div>
+          </div>
+
+          {/* ─── 3. FILTERS & SEARCH BAR ───────────────────────────────────────────── */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-2xs">
+            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto flex-1">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={14} className="absolute left-3 top-3 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by party, bill no, voucher, cheque no, description..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-slate-50/50 pl-9 pr-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-medium"
+                />
+              </div>
+
+              {/* Fiscal Year Filter */}
+              <select
+                value={selectedYearFilter}
+                onChange={(e) => setSelectedYearFilter(e.target.value)}
+                className="rounded-xl border border-rose-300 bg-rose-50/70 px-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-bold text-rose-950 shadow-2xs"
+              >
+                <option value="ACTIVE">चालु आ.व. ({activeFinancialYear?.year || '2083/84'})</option>
+                <option value="ALL">सबै आर्थिक वर्षहरू (All Fiscal Years)</option>
+                {financialYearsData?.map((fy: any) => (
+                  <option key={fy.id} value={fy.id.toString()}>
+                    आ.व. {fy.year} {fy.isActive ? '(चालु)' : ''}
+                  </option>
+                ))}
+              </select>
+
+              {/* Expense Category Filter */}
+              <select
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                  setSelectedHeadFilter('');
+                }}
+                className="rounded-xl border border-gray-200 bg-slate-50/50 px-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-medium"
+              >
+                <option value="">All Categories (सबै समूह)</option>
+                {categoriesData?.map((cat: any) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Expense Head with Code Filter */}
+              <select
+                value={selectedHeadFilter}
+                onChange={(e) => setSelectedHeadFilter(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-slate-50/50 px-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-medium"
+              >
+                <option value="">All Expense Topics (सबै खर्च शीर्षक)</option>
+                {headsData?.map((h: any) => (
+                  <option key={h.id} value={h.id}>
+                    {h.code ? `[Code: ${h.code}] ` : ''}{h.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Party Filter */}
+              <select
+                value={selectedPartyFilter}
+                onChange={(e) => setSelectedPartyFilter(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-slate-50/50 px-3 py-2 text-xs focus:border-[#1e3a5f] focus:outline-hidden font-medium"
+              >
+                <option value="">All Parties/Vendors (सबै पाउने पक्ष)</option>
+                {partiesData?.map((p: any) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.panNo ? `(PAN: ${p.panNo})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <span className="text-xs font-bold text-gray-500 font-mono">
+              Showing <b>{entries.length}</b> expense vouchers
+            </span>
+          </div>
+
+          {/* ─── 4. EXPENSE ENTRIES TABLE ─────────────────────────────────────────── */}
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-sans">
+                <thead className="bg-[#1e3a5f] text-white uppercase text-[10.5px] tracking-wider font-extrabold">
+                  <tr>
+                    <th className="py-3 px-4">Date (BS)</th>
+                    <th className="py-3 px-4">Voucher / Bill No</th>
+                    <th className="py-3 px-4">Expense Topic (शीर्षक & Code)</th>
+                    <th className="py-3 px-4">Paid To / Recipient (पाउने व्यक्ति/संस्था)</th>
+                    <th className="py-3 px-4">Payment Method & Account</th>
+                    <th className="py-3 px-4 text-right">Amount (रकम)</th>
+                    <th className="py-3 px-4">Approved By</th>
+                    <th className="py-3 px-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-gray-400">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#1e3a5f] border-t-transparent mx-auto mb-2" />
+                        Loading expense records...
+                      </td>
+                    </tr>
+                  ) : entries.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-gray-400 font-nepali">
+                        कुनै खर्च प्रविष्टि भेटिएन। ("Record Expense" बटन थिचेर नयाँ खर्च थप्नुहोस्।)
+                      </td>
+                    </tr>
+                  ) : (
+                    entries.map((entry: any) => (
+                      <tr key={entry.id} className="hover:bg-slate-50/80 transition">
+                        <td className="py-3 px-4 font-mono font-bold text-gray-900 whitespace-nowrap">
+                          <div>{entry.expenseDateBs}</div>
+                          <span className="inline-block text-[10px] font-sans font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 mt-0.5">
+                            आ.व. {entry.financialYear?.year || getFiscalYearFromBS(entry.expenseDateBs)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-mono font-bold text-[#1e3a5f] block">
+                            {entry.voucherNo || `VOUCH-${entry.id}`}
+                          </span>
+                          {entry.billNo && (
+                            <span className="text-[10px] text-gray-400 font-mono">Bill: {entry.billNo}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            {entry.head?.code && (
+                              <span className="rounded-md bg-slate-100 text-[#1e3a5f] px-1.5 py-0.5 text-[10px] font-black font-mono border border-slate-200">
+                                {entry.head.code}
+                              </span>
+                            )}
+                            <span className="font-bold text-gray-900">{entry.head?.name}</span>
+                          </div>
+                          <span className="text-[10px] text-gray-500 font-nepali block mt-0.5">
+                            {entry.head?.category?.name || 'General Expense'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {entry.party ? (
+                            <button
+                              onClick={() => setInspectPartyId(entry.party.id)}
+                              className="font-bold text-rose-700 hover:underline inline-flex items-center gap-1"
+                            >
+                              <Building size={12} />
+                              <span>{entry.party.name}</span>
+                            </button>
+                          ) : (
+                            <span className="font-bold text-gray-800">{entry.paidTo || '—'}</span>
+                          )}
+                          {entry.chequePayeeName && (
+                            <span className="text-[10.5px] font-bold text-purple-900 block mt-0.5 font-sans">
+                              💳 Payee: {entry.chequePayeeName}
+                            </span>
+                          )}
+                          {entry.description && (
+                            <span className="text-[10px] text-gray-500 block truncate max-w-xs">{entry.description}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1">
+                            <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                              entry.paymentMedium === 'CHEQUE' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                              entry.paymentMedium === 'BANK_TRANSFER' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                              'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            }`}>
+                              {entry.paymentMedium || 'CASH'}
+                            </span>
+                            {entry.chequeNo && (
+                              <span className="font-mono text-[10px] font-bold text-purple-900">
+                                Chk: {entry.chequeNo}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-gray-500 block truncate max-w-xs mt-0.5">
+                            {entry.paidFromAccount || 'School Operational Account'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-black text-rose-700 text-sm whitespace-nowrap">
+                          रू {(entry.amount || 0).toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-gray-600">
+                          {entry.approvedBy || 'Principal'}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => triggerSingleVoucherPrint(entry)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-[#1e3a5f] px-2 py-1 text-[11px] font-extrabold shadow-2xs transition"
+                              title="Print Single Official Journal Voucher"
+                            >
+                              <Printer size={12} />
+                              <span>Voucher</span>
+                            </button>
+
+                            {entry.partyId && (
+                              <button
+                                onClick={() => setInspectPartyId(entry.partyId)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 py-1 text-[11px] font-bold text-[#1e3a5f] hover:bg-slate-100 shadow-2xs transition"
+                                title="View Party History & Full Ledger"
+                              >
+                                <Eye size={12} />
+                                <span>Ledger</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleOpenEditModal(entry)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-1 text-[11px] font-bold shadow-2xs transition"
+                              title="Edit Expense Details"
+                            >
+                              <Edit2 size={12} />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                if (window.confirm('Are you sure you want to delete this expense entry?')) {
+                                  deleteExpenseMutation.mutate(entry.id);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 text-[11px] font-bold shadow-2xs transition"
+                              title="Delete Expense Entry"
+                            >
+                              <Trash2 size={12} />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ─── ACCOUNTS PAYABLE & BILL INSTALLMENTS VIEW ────────────────────────── */
+        <div className="space-y-6">
+          {/* Payable Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-2xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Total Registered Bills (कुल बिल दायित्व)</span>
+              <p className="text-2xl font-extrabold text-[#1e3a5f] mt-2 font-mono">रू {totalPayableAmount.toLocaleString()}</p>
+              <p className="text-[11px] text-gray-400 mt-1">विक्रेता तथा आपूर्तिकर्ताका दर्ता भएका बिल रकम</p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-2xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Total Settled / Paid (भुक्तान रकम)</span>
+              <p className="text-2xl font-extrabold text-emerald-700 mt-2 font-mono">रू {totalSettledAmount.toLocaleString()}</p>
+              <p className="text-[11px] text-gray-400 mt-1">विभिन्न आ.व.मा किस्ता चुक्ता भएको रकम</p>
+            </div>
+
+            <div className="rounded-2xl border border-rose-100 bg-white p-5 shadow-2xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Total Balance Due (भुक्तानी गर्न बाँकी)</span>
+              <p className="text-2xl font-extrabold text-rose-700 mt-2 font-mono">रू {totalOutstandingDue.toLocaleString()}</p>
+              <p className="text-[11px] text-gray-400 mt-1">बाँकी तिर्नुपर्ने कुल बक्यौता दायित्व</p>
+            </div>
+
+            <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-2xs">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Settled Bills Ratio</span>
+              <p className="text-2xl font-extrabold text-purple-800 mt-2">
+                {displayedBills.filter((b: any) => b.status === 'FULLY_PAID').length} / {displayedBills.length}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-1">पूर्ण रूपमा चुक्ता भएका बिलहरू</p>
+            </div>
+          </div>
+
+          {/* Accounts Payable Table */}
+          <div className="rounded-2xl border border-purple-200 bg-white shadow-2xs overflow-hidden">
+            <div className="p-4 bg-purple-900 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-extrabold uppercase tracking-wider flex items-center gap-2">
+                  <CreditCard size={16} className="text-amber-400" />
+                  <span>Accounts Payable Register & Multi-Year Settlements (भुक्तानी गर्न बाँकी हिसाब लेजर)</span>
+                </h3>
+                <p className="text-[11px] text-purple-200 mt-0.5">
+                  विभिन्न आर्थिक वर्षका बिलहरू दर्ता गर्नुहोस्, बहु-वर्षीय किस्ता ट्र्याक गर्नुहोस् र सम्पूर्ण दायित्व प्रतिवेदन निकाल्नुहोस्।
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => triggerConsolidatedPayablesPrint(payablesData)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-white text-purple-950 hover:bg-purple-50 font-extrabold px-3.5 py-1.5 text-xs shadow-sm transition border border-purple-300"
+                  title="Print Consolidated Payables & Dues Statement across all parties"
+                >
+                  <Printer size={14} className="text-purple-700" />
+                  <span>🖨️ तिर्न बाँकी दायित्व प्रतिवेदन (Print Payables Report)</span>
+                </button>
+                <button
+                  onClick={() => setIsPayVendorLumpSumOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-3.5 py-1.5 text-xs shadow-sm transition"
+                  title="Pay against Total Vendor Outstanding Balance (पार्टी कुल बक्यौता एकमुष्ट भुक्तानी)"
+                >
+                  <CreditCard size={14} />
+                  <span>+ Pay Vendor Balance (एकमुष्ट/आंशिक भुक्तानी)</span>
+                </button>
+                <button
+                  onClick={() => setIsRecordBillModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-purple-950 font-extrabold px-3.5 py-1.5 text-xs shadow-sm transition"
+                >
+                  <Plus size={14} />
+                  <span>+ Register New Bill (नयाँ बिल दर्ता)</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-sans">
+                <thead className="bg-slate-100 text-gray-700 uppercase text-[10.5px] tracking-wider font-extrabold border-b border-gray-200">
+                  <tr>
+                    <th className="py-3 px-4">Bill No & Origin FY</th>
+                    <th className="py-3 px-4">Vendor / Party</th>
+                    <th className="py-3 px-4">Expense Topic</th>
+                    <th className="py-3 px-4 text-right">Total Bill (रू)</th>
+                    <th className="py-3 px-4 text-right">Paid & Multi-FY History</th>
+                    <th className="py-3 px-4 text-right">Balance Due (रू)</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Actions & Summary JV</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700 font-medium">
+                  {displayedBills.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-gray-400 font-nepali">
+                        कुनै बिल/भुक्तानी बाँकी हिसाब दर्ता भएको छैन। ("+ Register New Bill" थिचेर दर्ता गर्नुहोस्।)
+                      </td>
+                    </tr>
+                  ) : (
+                    displayedBills.map((bill: any) => (
+                      <tr key={bill.key || `${bill.partyId}_${bill.billNo}`} className="hover:bg-purple-50/40 transition">
+                        <td className="py-3 px-4">
+                          <span className="font-mono font-extrabold text-[#1e3a5f] block text-sm">
+                            {bill.billNo}
+                          </span>
+                          <span className="text-[10.5px] font-mono text-gray-500 font-bold block">
+                            Date: {bill.billDateBs}
+                          </span>
+                          <span className="inline-block rounded bg-blue-100 text-blue-900 font-bold px-1.5 py-0.5 text-[9.5px] mt-0.5 border border-blue-200">
+                            दर्ता: आ.व. {bill.billFinancialYear || '—'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-gray-900 block text-sm">{bill.partyName}</span>
+                          {bill.panNo && (
+                            <span className="text-[10px] text-gray-500 font-mono block">PAN: {bill.panNo}</span>
+                          )}
+                          {bill.phone && (
+                            <span className="text-[10px] text-gray-500 font-mono block">Ph: {bill.phone}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-gray-800">{bill.headName}</span>
+                          {bill.description && (
+                            <span className="text-[10px] text-gray-500 block truncate max-w-xs">{bill.description}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-black text-gray-900 text-sm">
+                          रू {(bill.totalBillAmount || 0).toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-black text-emerald-700">
+                          <span className="text-sm">रू {(bill.totalPaidAmount || 0).toLocaleString()}</span>
+                          <div className="text-[10px] text-gray-500 font-sans mt-1 space-y-1">
+                            {bill.installments?.map((inst: any, iIdx: number) => (
+                              <div key={inst.id || iIdx} className="flex items-center justify-end gap-1 text-[9.5px] bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded">
+                                <span>किस्ता {iIdx + 1}:</span>
+                                <span className="bg-purple-100 text-purple-900 font-bold px-1 rounded text-[9px]">
+                                  आ.व. {inst.financialYear || '—'}
+                                </span>
+                                <span className="font-mono font-bold text-emerald-700">
+                                  रू {(inst.amount || 0).toLocaleString()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-black text-rose-700 text-sm whitespace-nowrap">
+                          रू {(bill.remainingDue || 0).toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`inline-block rounded-md px-2.5 py-1 text-[10.5px] font-black uppercase ${
+                            bill.status === 'FULLY_PAID'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : bill.status === 'PARTIAL'
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-rose-100 text-rose-800 border border-rose-300'
+                          }`}>
+                            {bill.status === 'FULLY_PAID' ? '✓ चुक्ता भएको' : bill.status === 'PARTIAL' ? '⚡ आंशिक किस्ता' : '⏳ बाँकी (Unpaid)'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            {bill.remainingDue > 0 && (
+                              <button
+                                onClick={() => {
+                                  setSelectedPayableBill(bill);
+                                  setInstAmount(bill.remainingDue.toString());
+                                  setInstDateBs(todayBS());
+                                  setInstFinancialYearId('');
+                                  setIsPayInstallmentModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg bg-purple-700 hover:bg-purple-800 text-white px-2.5 py-1 text-[11px] font-bold shadow-2xs transition"
+                                title="Pay Bill Installment"
+                              >
+                                <CreditCard size={12} />
+                                <span>+ Pay Installment</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => triggerBillSummaryVoucherPrint(bill)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-[#1e3a5f] px-2.5 py-1 text-[11px] font-extrabold shadow-2xs transition"
+                              title="Print All-in-One Summary Journal Voucher"
+                            >
+                              <Printer size={12} />
+                              <span>Summary JV</span>
+                            </button>
+
+                            {bill.partyId && (
+                              <button
+                                onClick={() => setInspectPartyId(bill.partyId)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 py-1 text-[11px] font-bold text-[#1e3a5f] hover:bg-slate-100 shadow-2xs transition"
+                                title="View Party History & Full Ledger"
+                              >
+                                <Eye size={12} />
+                                <span>Ledger</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleOpenEditPayable(bill)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 shadow-2xs transition"
+                              title="Edit Bill & Payable Details (बिल सम्पादन)"
+                            >
+                              <Edit2 size={12} />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeletePayable(bill)}
+                              disabled={isDeletingBill}
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-100 shadow-2xs transition disabled:opacity-50"
+                              title="Delete Bill and Associated Entries (बिल खारेज)"
+                            >
+                              <Trash2 size={12} />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 5. RECORD BILL / PAYABLE MODAL ────────────────────────────────────── */}
+      {isRecordBillModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h2 className="text-base font-extrabold text-purple-950 flex items-center gap-2">
+                  <CreditCard size={18} className="text-purple-700" />
+                  <span>Register Vendor Bill / Payable (नयाँ बिल दर्ता)</span>
+                </h2>
+                <p className="text-[11px] text-gray-500 font-nepali mt-0.5">
+                  विक्रेता/आपूर्तिकर्ताको बिल दर्ता गरी किस्ताबन्दी भुक्तानी ट्र्याक गर्नुहोस्
+                </p>
+              </div>
+              <button onClick={() => setIsRecordBillModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordBillSubmit} className="space-y-4 text-xs">
+              <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-100 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-extrabold text-purple-950">
+                        आर्थिक वर्ष (Fiscal Year) *
+                      </label>
+                    </div>
+                    <select
+                      value={billFinancialYearId || autoResolvedBillFY?.id || activeFinancialYear?.id || ''}
+                      onChange={(e) => setBillFinancialYearId(e.target.value)}
+                      className="erp-input font-bold text-[#1e3a5f]"
+                      required
+                    >
+                      {financialYearsData?.map((y: any) => (
+                        <option key={y.id} value={y.id}>
+                          आ.व. {y.year} {y.isActive ? '(चालु आ.व.)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {autoResolvedBillFY && (
+                      <span className="text-[9.5px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md inline-block mt-1">
+                        स्वतः पहिचान: {autoResolvedBillFY.year}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-extrabold text-gray-800">
+                        Vendor / Party (पाउने व्यक्ति/संस्था) *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddPartyModalOpen(true)}
+                        className="text-[10px] font-extrabold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-0.5"
+                      >
+                        <Plus size={11} />
+                        <span>+ Add Party (नयाँ पक्ष)</span>
+                      </button>
+                    </div>
+                    <select
+                      value={billPartyId}
+                      onChange={(e) => setBillPartyId(e.target.value)}
+                      required
+                      className="erp-input font-bold"
+                    >
+                      <option value="">-- Select Party / Vendor --</option>
+                      {partiesData?.map((p: any) => (
+                        <option key={p.id} value={p.id.toString()}>
+                          {p.name} {p.panNo ? `(PAN: ${p.panNo})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-extrabold text-gray-800">
+                        Expense Topic (खर्च शीर्षक) *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddHeadModalOpen(true)}
+                        className="text-[10px] font-extrabold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-0.5"
+                      >
+                        <Plus size={11} />
+                        <span>+ Add Topic (नयाँ शीर्षक)</span>
+                      </button>
+                    </div>
+                    <select
+                      value={billHeadId}
+                      onChange={(e) => setBillHeadId(e.target.value)}
+                      required
+                      className="erp-input font-bold"
+                    >
+                      <option value="">-- Select Expense Topic --</option>
+                      {headsData?.map((h: any) => (
+                        <option key={h.id} value={h.id.toString()}>
+                          {h.code ? `[${h.code}] ` : ''}{h.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Bill / Invoice No (बिल नं.) *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    placeholder="e.g. BILL-4091"
+                    value={billNo}
+                    onChange={(e) => setBillNo(e.target.value)}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Bill Date BS (मिति) *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={billDateBs}
+                    onChange={(e) => setBillDateBs(formatDateInput(e.target.value))}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Total Bill Amount in रू *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    placeholder="e.g. 50000"
+                    value={billTotalAmount}
+                    onChange={(e) => setBillTotalAmount(e.target.value)}
+                    className="erp-input font-mono font-extrabold text-purple-900"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-purple-50/70 p-3.5 rounded-xl border border-purple-200 space-y-3">
+                <div className="font-extrabold text-purple-950 text-[11px] uppercase">
+                  Initial Down Payment (पहिलो किस्ता/अग्रिम भुक्तानी - ऐच्छिक):
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Initial Paid (रू)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="0 if not paid yet"
+                      value={billInitialPaid}
+                      onChange={(e) => setBillInitialPaid(e.target.value)}
+                      className="erp-input font-mono font-bold text-emerald-700"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 mb-1">Payment Medium</label>
+                    <select
+                      value={billPaymentMedium}
+                      onChange={(e) => setBillPaymentMedium(e.target.value)}
+                      className="erp-input font-bold"
+                    >
+                      <option value="CASH">Cash (नगद भुक्तानी - Cash A/c)</option>
+                      <option value="CHEQUE">Cheque (चेक)</option>
+                      <option value="BANK_TRANSFER">Bank Transfer</option>
+                    </select>
+                  </div>
+                </div>
+
+                {parseFloat(billInitialPaid || '0') > 0 && billPaymentMedium === 'CASH' && (
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-300 p-2.5 text-xs font-bold text-emerald-950 flex items-center gap-2">
+                    <span>💵</span>
+                    <span>Disbursing From: <strong>विद्यालय नगद खाता (School Cash / Petty Cash A/c)</strong></span>
+                  </div>
+                )}
+
+                {parseFloat(billInitialPaid || '0') > 0 && billPaymentMedium !== 'CASH' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">School Bank Account *</label>
+                      <select
+                        value={billBankAccountId}
+                        onChange={(e) => setBillBankAccountId(e.target.value)}
+                        className="erp-input font-bold"
+                      >
+                        <option value="">-- Select Bank Account --</option>
+                        {bankAccountsData?.map((b: any) => (
+                          <option key={b.id} value={b.id}>
+                            {b.bankName} - {b.accountNo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-700 mb-1">Cheque No (चेक नं.)</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 984124"
+                        value={billChequeNo}
+                        onChange={(e) => setBillChequeNo(e.target.value)}
+                        className="erp-input font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Description / Particulars (विवरण)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Purchase of furniture, laboratory equipment, or maintenance..."
+                  value={billDescription}
+                  onChange={(e) => setBillDescription(e.target.value)}
+                  className="erp-input"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsRecordBillModalOpen(false)}
+                  className="rounded-xl border border-gray-200 px-4 py-2 font-bold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addExpenseMutation.isPending}
+                  className="rounded-xl bg-purple-700 px-5 py-2 font-bold text-white hover:bg-purple-800 shadow-sm"
+                >
+                  {addExpenseMutation.isPending ? 'Registering...' : 'Register Bill & Payable'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 6. PAY INSTALLMENT MODAL ─────────────────────────────────────────── */}
+      {isPayInstallmentModalOpen && selectedPayableBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h2 className="text-base font-extrabold text-purple-950 flex items-center gap-2">
+                  <CreditCard size={18} className="text-purple-700" />
+                  <span>Pay Bill Installment (किस्ता भुक्तानी)</span>
+                </h2>
+                <p className="text-[11px] text-gray-500 font-nepali mt-0.5">
+                  Bill No: <strong className="font-mono text-purple-900">{selectedPayableBill.billNo}</strong> | Party: <strong>{selectedPayableBill.partyName}</strong>
+                </p>
+              </div>
+              <button onClick={() => setIsPayInstallmentModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 bg-purple-50 p-3 rounded-xl border border-purple-200 text-center">
+              <div>
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Total Bill</span>
+                <p className="text-sm font-extrabold text-gray-900 font-mono">रू {(selectedPayableBill.totalBillAmount || 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Paid So Far</span>
+                <p className="text-sm font-extrabold text-emerald-700 font-mono">रू {(selectedPayableBill.totalPaidAmount || 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Remaining Due</span>
+                <p className="text-sm font-extrabold text-rose-700 font-mono">रू {(selectedPayableBill.remainingDue || 0).toLocaleString()}</p>
+              </div>
+            </div>
+
+            <form onSubmit={handlePayInstallmentSubmit} className="space-y-3.5 text-xs">
+              {/* Originating Bill Fiscal Year & Payment Fiscal Year */}
+              <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold text-purple-950">
+                    बिल दर्ता भएको आ.व. (Originating FY):
+                  </span>
+                  <span className="text-[10px] font-black bg-blue-100 text-blue-900 px-2 py-0.5 rounded-md border border-blue-200">
+                    आ.व. {selectedPayableBill.billFinancialYear || '—'}
+                  </span>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-extrabold text-[#1e3a5f]">
+                      भुक्तानी हुने आर्थिक वर्ष (Payment Fiscal Year) *
+                    </label>
+                    {autoResolvedInstFY && (
+                      <span className="text-[9.5px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                        स्वतः पहिचान: {autoResolvedInstFY.year}
+                      </span>
+                    )}
+                  </div>
+                  <select
+                    value={instFinancialYearId || autoResolvedInstFY?.id || activeFinancialYear?.id || ''}
+                    onChange={(e) => setInstFinancialYearId(e.target.value)}
+                    className="erp-input font-bold text-[#1e3a5f]"
+                    required
+                  >
+                    {financialYearsData?.map((y: any) => (
+                      <option key={y.id} value={y.id}>
+                        आ.व. {y.year} {y.isActive ? '(चालु आ.व.)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Installment Amount (किस्ता रकम रू) *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    value={instAmount}
+                    onChange={(e) => setInstAmount(e.target.value)}
+                    className="erp-input font-mono font-extrabold text-emerald-700 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Payment Date BS (मिति) *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={instDateBs}
+                    onChange={(e) => setInstDateBs(formatDateInput(e.target.value))}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Split Mode Toggle */}
+              <div className="flex items-center gap-2 p-2.5 bg-slate-100 rounded-xl border border-slate-200">
+                <input
+                  type="checkbox"
+                  id="instSplitToggle"
+                  checked={isInstSplitPayment}
+                  onChange={(e) => {
+                    setIsInstSplitPayment(e.target.checked);
+                    if (e.target.checked && instAmount) {
+                      const half = (parseFloat(instAmount) / 2).toFixed(2);
+                      setInstSplitCashAmount(half);
+                      setInstSplitBankAmount((parseFloat(instAmount) - parseFloat(half)).toFixed(2));
+                    }
+                  }}
+                  className="h-4 w-4 rounded text-purple-600 focus:ring-purple-500"
+                />
+                <label htmlFor="instSplitToggle" className="text-xs font-bold text-gray-800 cursor-pointer">
+                  मिश्रित भुक्तानी गर्नुहोस् (Split Payment: केही नगद + केही बैंक/चेक)
+                </label>
+              </div>
+
+              {isInstSplitPayment ? (
+                <div className="space-y-3 bg-purple-50/80 p-3.5 rounded-xl border border-purple-200">
+                  <div className="font-extrabold text-purple-950 text-[11px] uppercase">
+                    Split Breakdown (नगद तथा बैंक रकम विभाजन):
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        💵 नगद भुक्तानी रकम (Cash Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={instSplitCashAmount}
+                        onChange={(e) => setInstSplitCashAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-emerald-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        🏦 बैंक/चेक भुक्तानी रकम (Bank Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={instSplitBankAmount}
+                        onChange={(e) => setInstSplitBankAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-purple-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Split Bank Account & Cheque */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        School Bank Account *
+                      </label>
+                      <select
+                        value={instSplitBankAccountId}
+                        onChange={(e) => setInstSplitBankAccountId(e.target.value)}
+                        className="erp-input font-bold"
+                        required={parseFloat(instSplitBankAmount || '0') > 0}
+                      >
+                        <option value="">-- Select Bank Account --</option>
+                        {bankAccountsData?.map((b: any) => (
+                          <option key={b.id} value={b.id}>
+                            {b.bankName} - {b.accountNo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        Cheque No (चेक नं.)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 509214"
+                        value={instSplitChequeNo}
+                        onChange={(e) => setInstSplitChequeNo(e.target.value)}
+                        className="erp-input font-mono font-bold text-purple-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-bold text-purple-900 bg-white p-2 rounded-lg border border-purple-200 flex justify-between">
+                    <span>कुल जोड (Total): रू {((parseFloat(instSplitCashAmount || '0') + parseFloat(instSplitBankAmount || '0'))).toLocaleString()}</span>
+                    <span>किस्ता रकम (Target): रू {(parseFloat(instAmount || '0')).toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block font-extrabold text-gray-800 mb-1">
+                      Payment Medium (भुक्तानी विधि) *
+                    </label>
+                    <select
+                      value={instPaymentMedium}
+                      onChange={(e) => setInstPaymentMedium(e.target.value)}
+                      className="erp-input font-bold"
+                    >
+                      <option value="CASH">Cash (नगद भुक्तानी - Cash A/c)</option>
+                      <option value="CHEQUE">Cheque (चेक)</option>
+                      <option value="BANK_TRANSFER">Bank Transfer</option>
+                    </select>
+                  </div>
+
+                  {instPaymentMedium === 'CASH' ? (
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-xs font-bold text-emerald-950 flex items-center gap-2">
+                      <span className="text-base">💵</span>
+                      <span>Disbursing From: <strong>विद्यालय नगद खाता (School Cash / Petty Cash A/c)</strong></span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 bg-purple-50/70 p-3.5 rounded-xl border border-purple-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-extrabold text-purple-950 mb-1">
+                            School Bank Account *
+                          </label>
+                          <select
+                            value={instBankAccountId}
+                            onChange={(e) => setInstBankAccountId(e.target.value)}
+                            className="erp-input font-bold"
+                            required={instPaymentMedium !== 'CASH'}
+                          >
+                            <option value="">-- Select Bank Account --</option>
+                            {bankAccountsData?.map((b: any) => (
+                              <option key={b.id} value={b.id}>
+                                {b.bankName} - {b.accountNo}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block font-extrabold text-purple-950 mb-1">
+                            Cheque No (चेक नं.)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 509214"
+                            value={instChequeNo}
+                            onChange={(e) => setInstChequeNo(e.target.value)}
+                            className="erp-input font-mono font-bold text-purple-900 border-purple-300"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-extrabold text-purple-950 mb-1">
+                          Cheque Payee Name (चेक पाउनेको नाम)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={selectedPayableBill.partyName}
+                          value={instChequePayeeName}
+                          onChange={(e) => setInstChequePayeeName(e.target.value)}
+                          className="erp-input font-bold border-purple-300"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Custom Voucher No (ऐच्छिक)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Auto Generated if blank"
+                  value={instVoucherNo}
+                  onChange={(e) => setInstVoucherNo(e.target.value)}
+                  className="erp-input font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Remarks (कैफियत)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 2nd Installment payment for school furniture"
+                  value={instRemarks}
+                  onChange={(e) => setInstRemarks(e.target.value)}
+                  className="erp-input"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsPayInstallmentModalOpen(false)}
+                  className="rounded-xl border border-gray-200 px-4 py-2 font-bold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addExpenseMutation.isPending}
+                  className="rounded-xl bg-purple-700 px-5 py-2 font-bold text-white hover:bg-purple-800 shadow-sm"
+                >
+                  {addExpenseMutation.isPending ? 'Processing...' : 'Disburse Installment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 4.5 PAY VENDOR LUMP-SUM / TOTAL BALANCE MODAL ───────────────────────── */}
+      {isPayVendorLumpSumOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h2 className="text-base font-extrabold text-[#1e3a5f] flex items-center gap-2">
+                  <CreditCard size={18} className="text-emerald-600" />
+                  <span>पार्टी कुल बक्यौता एकमुष्ट भुक्तानी (Vendor Lump-Sum Settlement)</span>
+                </h2>
+                <p className="text-[11px] text-gray-500 font-nepali mt-0.5">
+                  सप्लायर/पार्टीको कुल बक्यौता हिसाबबाट एकमुष्ट वा आंशिक भुक्तानी (नगद, बैंक, चेक वा मिश्रित विधि)
+                </p>
+              </div>
+              <button
+                onClick={() => setIsPayVendorLumpSumOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Vendor Selector & Summary */}
+            <div className="space-y-3">
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1 text-xs">
+                  सप्लायर / पार्टी छनौट गर्नुहोस् (Select Vendor / Party) *
+                </label>
+                <SearchableSelect
+                  placeholder="-- Select Vendor / Party --"
+                  value={lumpSumPartyId}
+                  onChange={(val) => setLumpSumPartyId(val)}
+                  required
+                  options={(partiesData || []).map((p: any) => ({
+                    value: p.id.toString(),
+                    label: p.name,
+                    sublabel: p.panNo ? `PAN: ${p.panNo}` : p.contactPerson,
+                    code: p.phone,
+                  }))}
+                />
+              </div>
+
+              {/* Live Party Balance Cards */}
+              {lumpSumPartyId && (() => {
+                const selParty = partiesData?.find((p: any) => p.id.toString() === lumpSumPartyId);
+                const pBills = displayedBills?.filter((b: any) => b.partyId?.toString() === lumpSumPartyId || b.partyName === selParty?.name) || [];
+                const pTotalBills = pBills.reduce((acc: number, b: any) => acc + (b.totalBillAmount || 0), 0);
+                const pTotalPaid = pBills.reduce((acc: number, b: any) => acc + (b.totalPaidAmount || 0), 0);
+                const pNetDue = pBills.reduce((acc: number, b: any) => acc + (b.remainingDue || 0), 0);
+                const payingNow = parseFloat(lumpSumTotalAmount || '0');
+                const newDue = pNetDue - payingNow;
+
+                return (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2 bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 text-center">
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Total Bills ({pBills.length})</span>
+                        <p className="text-xs sm:text-sm font-extrabold text-gray-900 font-mono">रू {pTotalBills.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Paid So Far</span>
+                        <p className="text-xs sm:text-sm font-extrabold text-emerald-700 font-mono">रू {pTotalPaid.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Current Net Due</span>
+                        <p className="text-xs sm:text-sm font-extrabold text-rose-700 font-mono">रू {pNetDue.toLocaleString()}</p>
+                      </div>
+                    </div>
+
+                    {payingNow > 0 && (
+                      <div className="rounded-xl bg-slate-900 text-white p-2.5 text-xs flex items-center justify-between font-mono">
+                        <span className="text-gray-300">भुक्तानी पछिको बाँकी (New Due):</span>
+                        <span className={`font-extrabold text-sm ${newDue < 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          रू {newDue.toLocaleString()} {newDue < 0 ? '(Advance/अग्रिम)' : ''}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <form onSubmit={handlePayVendorLumpSumSubmit} className="space-y-3.5 text-xs">
+              {/* Fiscal Year & Head */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-extrabold text-[#1e3a5f]">
+                      आर्थिक वर्ष (Fiscal Year) *
+                    </label>
+                    {autoResolvedLumpSumFY && (
+                      <span className="text-[9.5px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md">
+                        {autoResolvedLumpSumFY.year}
+                      </span>
+                    )}
+                  </div>
+                  <select
+                    value={lumpSumFinancialYearId || autoResolvedLumpSumFY?.id || activeFinancialYear?.id || ''}
+                    onChange={(e) => setLumpSumFinancialYearId(e.target.value)}
+                    className="erp-input font-bold text-[#1e3a5f]"
+                    required
+                  >
+                    {financialYearsData?.map((y: any) => (
+                      <option key={y.id} value={y.id}>
+                        आ.व. {y.year} {y.isActive ? '(चालु आ.व.)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Expense Topic (खर्च शीर्षक) *
+                  </label>
+                  <select
+                    value={lumpSumHeadId}
+                    onChange={(e) => setLumpSumHeadId(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="">-- General / Default Topic --</option>
+                    {headsData?.map((h: any) => (
+                      <option key={h.id} value={h.id}>
+                        {h.code ? `[${h.code}] ` : ''}{h.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Amount & Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Amount to Pay (भुक्तानी रकम रू) *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    placeholder="e.g. 45000.50"
+                    value={lumpSumTotalAmount}
+                    onChange={(e) => {
+                      setLumpSumTotalAmount(e.target.value);
+                      if (isLumpSumSplit && e.target.value) {
+                        const half = (parseFloat(e.target.value) / 2).toFixed(2);
+                        setLumpSumSplitCashAmount(half);
+                        setLumpSumSplitBankAmount((parseFloat(e.target.value) - parseFloat(half)).toFixed(2));
+                      }
+                    }}
+                    className="erp-input font-mono font-extrabold text-emerald-700 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Payment Date BS (मिति) *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={lumpSumDateBs}
+                    onChange={(e) => setLumpSumDateBs(formatDateInput(e.target.value))}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* Split Mode Checkbox */}
+              <div className="flex items-center gap-2 p-2.5 bg-slate-100 rounded-xl border border-slate-200">
+                <input
+                  type="checkbox"
+                  id="lumpSumSplitToggle"
+                  checked={isLumpSumSplit}
+                  onChange={(e) => {
+                    setIsLumpSumSplit(e.target.checked);
+                    if (e.target.checked && lumpSumTotalAmount) {
+                      const half = (parseFloat(lumpSumTotalAmount) / 2).toFixed(2);
+                      setLumpSumSplitCashAmount(half);
+                      setLumpSumSplitBankAmount((parseFloat(lumpSumTotalAmount) - parseFloat(half)).toFixed(2));
+                    }
+                  }}
+                  className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500"
+                />
+                <label htmlFor="lumpSumSplitToggle" className="text-xs font-bold text-gray-800 cursor-pointer">
+                  मिश्रित भुक्तानी गर्नुहोस् (Split Payment: केही नगद + केही बैंक/चेक)
+                </label>
+              </div>
+
+              {isLumpSumSplit ? (
+                <div className="space-y-3 bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200">
+                  <div className="font-extrabold text-emerald-950 text-[11px] uppercase">
+                    Split Breakdown (नगद तथा बैंक रकम विभाजन):
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        💵 नगद भुक्तानी रकम (Cash Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={lumpSumSplitCashAmount}
+                        onChange={(e) => setLumpSumSplitCashAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-emerald-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        🏦 बैंक/चेक भुक्तानी रकम (Bank Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={lumpSumSplitBankAmount}
+                        onChange={(e) => setLumpSumSplitBankAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-purple-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        School Bank Account *
+                      </label>
+                      <select
+                        value={lumpSumSplitBankAccountId}
+                        onChange={(e) => setLumpSumSplitBankAccountId(e.target.value)}
+                        className="erp-input font-bold"
+                        required={parseFloat(lumpSumSplitBankAmount || '0') > 0}
+                      >
+                        <option value="">-- Select Bank Account --</option>
+                        {bankAccountsData?.map((b: any) => (
+                          <option key={b.id} value={b.id}>
+                            {b.bankName} - {b.accountNo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        Cheque No (चेक नं.)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 509214"
+                        value={lumpSumSplitChequeNo}
+                        onChange={(e) => setLumpSumSplitChequeNo(e.target.value)}
+                        className="erp-input font-mono font-bold text-purple-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] font-bold text-emerald-950 bg-white p-2 rounded-lg border border-emerald-200 flex justify-between font-mono">
+                    <span>कुल जोड: रू {((parseFloat(lumpSumSplitCashAmount || '0') + parseFloat(lumpSumSplitBankAmount || '0'))).toLocaleString()}</span>
+                    <span>कुल भुक्तानी रकम: रू {(parseFloat(lumpSumTotalAmount || '0')).toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block font-extrabold text-gray-800 mb-1">
+                      Payment Medium (भुक्तानी विधि) *
+                    </label>
+                    <select
+                      value={lumpSumPaymentMedium}
+                      onChange={(e) => setLumpSumPaymentMedium(e.target.value)}
+                      className="erp-input font-bold"
+                    >
+                      <option value="CASH">Cash (नगद भुक्तानी - Cash A/c)</option>
+                      <option value="CHEQUE">Cheque (चेक)</option>
+                      <option value="BANK_TRANSFER">Bank Transfer</option>
+                    </select>
+                  </div>
+
+                  {lumpSumPaymentMedium === 'CASH' ? (
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-300 p-3 text-xs font-bold text-emerald-950 flex items-center gap-2">
+                      <span className="text-base">💵</span>
+                      <span>Disbursing From: <strong>विद्यालय नगद खाता (School Cash / Petty Cash A/c)</strong></span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 bg-purple-50/70 p-3.5 rounded-xl border border-purple-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-extrabold text-purple-950 mb-1">
+                            School Bank Account *
+                          </label>
+                          <select
+                            value={lumpSumBankAccountId}
+                            onChange={(e) => setLumpSumBankAccountId(e.target.value)}
+                            className="erp-input font-bold"
+                            required={lumpSumPaymentMedium !== 'CASH'}
+                          >
+                            <option value="">-- Select Bank Account --</option>
+                            {bankAccountsData?.map((b: any) => (
+                              <option key={b.id} value={b.id}>
+                                {b.bankName} - {b.accountNo}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block font-extrabold text-purple-950 mb-1">
+                            Cheque No (चेक नं.)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 509214"
+                            value={lumpSumChequeNo}
+                            onChange={(e) => setLumpSumChequeNo(e.target.value)}
+                            className="erp-input font-mono font-bold text-purple-900 border-purple-300"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-extrabold text-purple-950 mb-1">
+                          Cheque Payee Name (चेक पाउनेको नाम)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Vendor / Payee Name"
+                          value={lumpSumChequePayeeName}
+                          onChange={(e) => setLumpSumChequePayeeName(e.target.value)}
+                          className="erp-input font-bold border-purple-300"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Custom Voucher No (ऐच्छिक)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Auto Generated if blank"
+                  value={lumpSumVoucherNo}
+                  onChange={(e) => setLumpSumVoucherNo(e.target.value)}
+                  className="erp-input font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Remarks (कैफियत)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Lump-sum partial settlement for stationary & construction materials"
+                  value={lumpSumRemarks}
+                  onChange={(e) => setLumpSumRemarks(e.target.value)}
+                  className="erp-input"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsPayVendorLumpSumOpen(false)}
+                  className="rounded-xl border border-gray-200 px-4 py-2 font-bold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={addExpenseMutation.isPending}
+                  className="rounded-xl bg-emerald-600 px-5 py-2 font-bold text-white hover:bg-emerald-700 shadow-sm"
+                >
+                  {addExpenseMutation.isPending ? 'Processing...' : 'Disburse Settlement (भुक्तानी गर्नुहोस्)'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 5. RECORD EXPENSE MODAL ──────────────────────────────────────────── */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-extrabold text-[#1e3a5f] flex items-center gap-2">
+                    <TrendingDown size={18} className="text-rose-600" />
+                    <span>Record School Expense (खर्च प्रविष्टि)</span>
+                  </h2>
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    🔄 लगातार प्रविष्टि (Continuous Entry Mode)
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 font-nepali mt-0.5">
+                  नेपाल सरकार ढाँचा बमोजिम खर्च शीर्षक, पाउने व्यक्ति/संस्था, रकम र भुक्तानी विवरण प्रविष्टि (बन्द गर्न Cancel वा X थिच्नुहोस्)
+                </p>
+              </div>
+              <button onClick={() => setIsAddModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
+              {/* Row 0: Fiscal Year Selector */}
+              <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-extrabold text-[#1e3a5f]">
+                    आर्थिक वर्ष (Fiscal Year) *
+                  </label>
+                  {autoResolvedFY && (
+                    <span className="text-[9.5px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                      स्वतः पहिचान: {autoResolvedFY.year}
+                    </span>
+                  )}
+                </div>
+                <select
+                  value={expenseFormYearId || autoResolvedFY?.id || activeFinancialYear?.id || ''}
+                  onChange={(e) => setExpenseFormYearId(e.target.value)}
+                  className="erp-input font-bold text-[#1e3a5f]"
+                  required
+                >
+                  {financialYearsData?.map((y: any) => (
+                    <option key={y.id} value={y.id}>
+                      आ.व. {y.year} {y.isActive ? '(चालु आ.व.)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Row 1: Searchable Expense Topic & Amount */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-extrabold text-gray-800">
+                      Expense Topic / Head (शीर्षक & Code) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddHeadModalOpen(true)}
+                      className="text-[10px] font-extrabold text-rose-600 hover:underline flex items-center gap-0.5"
+                    >
+                      <Plus size={11} />
+                      <span>+ Add Topic (नयाँ शीर्षक)</span>
+                    </button>
+                  </div>
+                  <SearchableSelect
+                    placeholder="-- Select Expense Topic (शीर्षक छनौट) --"
+                    value={addExpenseHeadId}
+                    onChange={(val) => setAddExpenseHeadId(val)}
+                    required
+                    options={(headsData || []).map((h: any) => ({
+                      value: h.id.toString(),
+                      label: h.name,
+                      sublabel: h.nameNepali || h.category?.name,
+                      code: h.code,
+                    }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Amount in रू (खर्च रकम) *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    placeholder="e.g. 15000"
+                    value={addExpenseAmount}
+                    onChange={(e) => setAddExpenseAmount(e.target.value)}
+                    className="erp-input font-bold text-rose-700 font-mono text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Expense Date & Recipient / Party */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Expense Date in BS (YYYY-MM-DD) *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={addExpenseDateBs}
+                    onChange={(e) => setAddExpenseDateBs(formatDateInput(e.target.value))}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-extrabold text-gray-800">
+                      Paid To / Recipient (पाउने व्यक्ति/संस्था)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddPartyModalOpen(true)}
+                      className="text-[10px] font-extrabold text-rose-600 hover:underline flex items-center gap-0.5"
+                    >
+                      <Plus size={11} />
+                      <span>+ Add Party (नयाँ पाउने पक्ष)</span>
+                    </button>
+                  </div>
+                  <SearchableSelect
+                    placeholder="-- Select Saved Party / Vendor --"
+                    value={selectedPartyId}
+                    onChange={(val) => setSelectedPartyId(val)}
+                    options={(partiesData || []).map((p: any) => ({
+                      value: p.id.toString(),
+                      label: p.name,
+                      sublabel: p.nameNepali || (p.panNo ? `PAN: ${p.panNo}` : p.partyType),
+                    }))}
+                  />
+                  {!selectedPartyId && (
+                    <input
+                      type="text"
+                      placeholder="Or type Recipient / Vendor name manually..."
+                      value={addExpensePaidToManual}
+                      onChange={(e) => setAddExpensePaidToManual(e.target.value)}
+                      className="erp-input font-medium mt-1"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Row 3: Payment Method & Paid From Account */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Payment Method (भुक्तानी विधि)
+                  </label>
+                  <select
+                    value={paymentMedium}
+                    onChange={(e) => setPaymentMedium(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="CASH">CASH (नगद भुक्तानी)</option>
+                    <option value="BANK_TRANSFER">BANK TRANSFER (बैंक ट्रान्सफर)</option>
+                    <option value="CHEQUE">CHEQUE (चेक मार्फत)</option>
+                    <option value="QR_CODE">QR CODE (क्युआर कोड)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Paid From Account (कुन खाताबाट)
+                  </label>
+                  {paymentMedium === 'CASH' ? (
+                    <div className="p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-xs font-bold text-emerald-950 flex items-center gap-2">
+                      <span>💵</span>
+                      <span>विद्यालय नगद खाता (School Cash / Petty Cash A/c)</span>
+                    </div>
+                  ) : (
+                    <>
+                      <SearchableSelect
+                        placeholder="-- Select School Bank Account --"
+                        value={selectedBankAcc}
+                        onChange={(val) => setSelectedBankAcc(val)}
+                        options={(bankAccountsData || []).map((b: any) => ({
+                          value: b.id.toString(),
+                          label: `${b.bankName} - ${b.accountName}`,
+                          sublabel: `Acc: ${b.accountNo}`,
+                        }))}
+                      />
+                      {!selectedBankAcc && (
+                        <div className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/60 text-xs text-blue-900 font-medium mt-1">
+                          School Operational Account
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Split Mode Toggle */}
+              <div className="flex items-center gap-2 p-2.5 bg-slate-100 rounded-xl border border-slate-200">
+                <input
+                  type="checkbox"
+                  id="addExpenseSplitToggle"
+                  checked={isAddExpenseSplit}
+                  onChange={(e) => {
+                    setIsAddExpenseSplit(e.target.checked);
+                    if (e.target.checked && addExpenseAmount) {
+                      const half = (parseFloat(addExpenseAmount) / 2).toFixed(2);
+                      setAddExpenseSplitCashAmount(half);
+                      setAddExpenseSplitBankAmount((parseFloat(addExpenseAmount) - parseFloat(half)).toFixed(2));
+                    }
+                  }}
+                  className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500"
+                />
+                <label htmlFor="addExpenseSplitToggle" className="text-xs font-bold text-gray-800 cursor-pointer">
+                  मिश्रित भुक्तानी गर्नुहोस् (Split Payment: केही नगद + केही बैंक/चेक)
+                </label>
+              </div>
+
+              {isAddExpenseSplit ? (
+                <div className="space-y-3 bg-rose-50/70 p-3.5 rounded-xl border border-rose-200">
+                  <div className="font-extrabold text-rose-950 text-[11px] uppercase">
+                    Split Breakdown (नगद तथा बैंक रकम विभाजन):
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        💵 नगद भुक्तानी रकम (Cash Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={addExpenseSplitCashAmount}
+                        onChange={(e) => setAddExpenseSplitCashAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-emerald-700"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        🏦 बैंक/चेक भुक्तानी रकम (Bank Portion रू) *
+                      </label>
+                      <input
+                        required
+                        type="number"
+                        step="any"
+                        placeholder="0.00"
+                        value={addExpenseSplitBankAmount}
+                        onChange={(e) => setAddExpenseSplitBankAmount(e.target.value)}
+                        className="erp-input font-mono font-bold text-rose-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        School Bank Account *
+                      </label>
+                      <select
+                        value={addExpenseSplitBankAccountId}
+                        onChange={(e) => setAddExpenseSplitBankAccountId(e.target.value)}
+                        className="erp-input font-bold"
+                        required={parseFloat(addExpenseSplitBankAmount || '0') > 0}
+                      >
+                        <option value="">-- Select Bank Account --</option>
+                        {bankAccountsData?.map((b: any) => (
+                          <option key={b.id} value={b.id}>
+                            {b.bankName} - {b.accountNo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-800 mb-1">
+                        Cheque No (चेक नं.)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 509214"
+                        value={addExpenseSplitChequeNo}
+                        onChange={(e) => setAddExpenseSplitChequeNo(e.target.value)}
+                        className="erp-input font-mono font-bold text-rose-900"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-800 mb-1">
+                      Cheque Issued To / Payee Name (चेक पाउनेको नाम)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Account holder name if different from party"
+                      value={addExpenseSplitPayeeName}
+                      onChange={(e) => setAddExpenseSplitPayeeName(e.target.value)}
+                      className="erp-input font-bold"
+                    />
+                  </div>
+
+                  <div className="text-[11px] font-bold text-rose-950 bg-white p-2 rounded-lg border border-rose-200 flex justify-between font-mono">
+                    <span>कुल जोड (Total): रू {((parseFloat(addExpenseSplitCashAmount || '0') + parseFloat(addExpenseSplitBankAmount || '0'))).toLocaleString()}</span>
+                    <span>कुल खर्च (Target): रू {(parseFloat(addExpenseAmount || '0')).toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {(paymentMedium === 'CHEQUE' || paymentMedium === 'BANK_TRANSFER') && (
+                    <div className="space-y-3 bg-purple-50/70 p-3.5 rounded-xl border border-purple-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="block font-extrabold text-purple-950 mb-1">
+                            Cheque / Trans Ref No. (चेक नम्बर) *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. CHQ-98765432"
+                            value={addExpenseChequeNo}
+                            onChange={(e) => setAddExpenseChequeNo(e.target.value)}
+                            className="erp-input font-mono font-bold border-purple-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-extrabold text-purple-950 mb-1">
+                            Cheque Date in BS (चेक मिति)
+                          </label>
+                          <input
+                            type="text"
+                            value={addChequeDateBs}
+                            onChange={(e) => setAddChequeDateBs(formatDateInput(e.target.value))}
+                            className="erp-input font-mono font-bold border-purple-300"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block font-extrabold text-purple-950 mb-1">
+                          Cheque Issued To / Payee Name (चेक कसको नाममा जारी गरियो - Account Holder)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Specify Account Holder Name if different from Shop/Firm Name (e.g. Ram Kumar Sharma)"
+                          value={addExpenseChequePayeeName}
+                          onChange={(e) => setAddExpenseChequePayeeName(e.target.value)}
+                          className="erp-input font-bold border-purple-300"
+                        />
+                        <span className="text-[10px] text-purple-700 font-medium block mt-0.5">
+                          💡 Use this if the shop/vendor name is different from the personal account owner receiving the cheque/transfer.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Row 4: Bill No & Approved By */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Bill / Voucher Number (बिल/भौचर नं)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="BILL-2083-042"
+                    value={addExpenseBillNo}
+                    onChange={(e) => setAddExpenseBillNo(e.target.value)}
+                    className="erp-input font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Approved By (स्वीकृत गर्ने अधिकारी)
+                  </label>
+                  <select
+                    value={approvedByOption}
+                    onChange={(e) => setApprovedByOption(e.target.value)}
+                    className="erp-input font-bold mb-1"
+                  >
+                    <option value="Principal (प्रधानाध्यापक)">Principal (प्रधानाध्यापक)</option>
+                    <option value="SMC Chairperson (विद्यालय व्यवस्थापन समिति अध्यक्ष)">SMC Chairperson (वि.व्य.स. अध्यक्ष)</option>
+                    <option value="Accountant (लेखापाल)">Accountant (लेखापाल)</option>
+                    <option value="Vice Principal (सहायक प्र.अ.)">Vice Principal (सहायक प्र.अ.)</option>
+                    <option value="CUSTOM">Other Authority (अन्य लेख्नुहोस्)...</option>
+                  </select>
+                  {approvedByOption === 'CUSTOM' && (
+                    <input
+                      type="text"
+                      placeholder="Type Authority Name..."
+                      value={customApprovedBy}
+                      onChange={(e) => setCustomApprovedBy(e.target.value)}
+                      className="erp-input"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Particulars & Remarks */}
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Description / Particulars (खर्चको विवरण)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Details of purchased stationery, repair work, event expenses..."
+                  value={addExpenseDescription}
+                  onChange={(e) => setAddExpenseDescription(e.target.value)}
+                  className="erp-input"
+                />
+              </div>
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">Remarks (कैफियत)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Any extra remarks..."
+                  value={addExpenseRemarks}
+                  onChange={(e) => setAddExpenseRemarks(e.target.value)}
+                  className="erp-input"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-between border-t border-gray-100 pt-4">
+                <span className="text-[11px] text-gray-500 font-medium">
+                  💡 सेभ गरेपछि सोही पार्टी/शीर्षक यथावत रहन्छ। बन्द गर्न <strong>Cancel</strong> थिच्नुहोस्।
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="rounded-xl border border-gray-200 px-4 py-2 font-semibold text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel / बन्द गर्नुहोस्
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addExpenseMutation.isPending}
+                    className="rounded-xl bg-rose-600 px-6 py-2 font-bold text-white hover:bg-rose-700 disabled:opacity-60 shadow-xs"
+                  >
+                    {addExpenseMutation.isPending ? 'Saving...' : 'Save Expense (खर्च सेभ गर्नुहोस्)'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 5.5 EDIT EXPENSE MODAL ──────────────────────────────────────────── */}
+      {editingExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h2 className="text-base font-extrabold text-[#1e3a5f] flex items-center gap-2">
+                  <Edit2 size={18} className="text-blue-600" />
+                  <span>Edit Expense Details (खर्च विवरण सम्पादन)</span>
+                </h2>
+                <p className="text-[11px] text-gray-500 font-nepali mt-0.5">
+                  Voucher No: <b className="font-mono text-[#1e3a5f]">{editingExpense.voucherNo || `VOUCH-${editingExpense.id}`}</b>
+                </p>
+              </div>
+              <button onClick={() => setEditingExpense(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
+              {/* Row 0: Fiscal Year Selector */}
+              <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200">
+                <label className="block font-extrabold text-[#1e3a5f] mb-1">
+                  आर्थिक वर्ष (Fiscal Year) *
+                </label>
+                <select
+                  value={editAcademicYearId || activeYear?.id || ''}
+                  onChange={(e) => setEditAcademicYearId(e.target.value)}
+                  className="erp-input font-bold text-[#1e3a5f]"
+                  required
+                >
+                  {yearsData?.map((y: any) => (
+                    <option key={y.id} value={y.id}>
+                      आ.व. {y.year} {y.isActive ? '(चालु आ.व.)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Row 1: Expense Topic & Amount */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Expense Topic / Head (शीर्षक & Code) *
+                  </label>
+                  <select
+                    value={editHeadId}
+                    onChange={(e) => setEditHeadId(e.target.value)}
+                    required
+                    className="erp-input font-bold"
+                  >
+                    <option value="">-- Select Expense Topic --</option>
+                    {headsData?.map((h: any) => (
+                      <option key={h.id} value={h.id}>
+                        {h.code ? `[${h.code}] ` : ''}{h.name} {h.nameNepali ? `(${h.nameNepali})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Amount in रू (खर्च रकम) *
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="any"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    placeholder="e.g. 15000"
+                    className="erp-input font-bold text-rose-700 font-mono text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Expense Date & Recipient / Party */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Expense Date in BS (YYYY-MM-DD) *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={editExpenseDateBs}
+                    onChange={(e) => setEditExpenseDateBs(formatDateInput(e.target.value))}
+                    placeholder="2080-04-03"
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Paid To / Recipient (पाउने व्यक्ति/संस्था)
+                  </label>
+                  <select
+                    value={editPartyId}
+                    onChange={(e) => setEditPartyId(e.target.value)}
+                    className="erp-input font-bold mb-1"
+                  >
+                    <option value="">-- Select Saved Party / Vendor --</option>
+                    {partiesData?.map((p: any) => (
+                      <option key={p.id} value={p.id.toString()}>
+                        {p.name} {p.panNo ? `(PAN: ${p.panNo})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {!editPartyId && (
+                    <input
+                      type="text"
+                      value={editPaidTo}
+                      onChange={(e) => setEditPaidTo(e.target.value)}
+                      placeholder="Or type Recipient / Vendor name manually..."
+                      className="erp-input font-medium"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Row 3: Payment Method & Paid From Account */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Payment Method (भुक्तानी विधि)
+                  </label>
+                  <select
+                    value={editPaymentMedium}
+                    onChange={(e) => setEditPaymentMedium(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="CASH">CASH (नगद भुक्तानी)</option>
+                    <option value="BANK_TRANSFER">BANK TRANSFER (बैंक ट्रान्सफर)</option>
+                    <option value="CHEQUE">CHEQUE (चेक मार्फत)</option>
+                    <option value="QR_CODE">QR CODE (क्युआर कोड)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Paid From Account (कुन खाताबाट)
+                  </label>
+                  {editPaymentMedium === 'CASH' ? (
+                    <div className="p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-xs font-bold text-emerald-950 flex items-center gap-2">
+                      <span>💵</span>
+                      <span>विद्यालय नगद खाता (School Cash / Petty Cash A/c)</span>
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        value={editBankAccountId}
+                        onChange={(e) => setEditBankAccountId(e.target.value)}
+                        className="erp-input font-bold mb-1"
+                      >
+                        <option value="">-- Select School Bank Account --</option>
+                        {bankAccountsData?.map((b: any) => (
+                          <option key={b.id} value={b.id.toString()}>
+                            {b.bankName} - {b.accountName} ({b.accountNo})
+                          </option>
+                        ))}
+                      </select>
+                      {!editBankAccountId && (
+                        <input
+                          type="text"
+                          value={editPaidFromAccount}
+                          onChange={(e) => setEditPaidFromAccount(e.target.value)}
+                          className="erp-input"
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Conditional Cheque Details */}
+              {(editPaymentMedium === 'CHEQUE' || editPaymentMedium === 'BANK_TRANSFER') && (
+                <div className="space-y-3 bg-purple-50/70 p-3.5 rounded-xl border border-purple-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block font-extrabold text-purple-950 mb-1">
+                        Cheque / Trans Ref No. (चेक नम्बर)
+                      </label>
+                      <input
+                        type="text"
+                        value={editChequeNo}
+                        onChange={(e) => setEditChequeNo(e.target.value)}
+                        placeholder="e.g. CHQ-98765432"
+                        className="erp-input font-mono font-bold border-purple-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-extrabold text-purple-950 mb-1">
+                        Cheque Date in BS (चेक मिति)
+                      </label>
+                      <input
+                        type="text"
+                        value={editChequeDateBs}
+                        onChange={(e) => setEditChequeDateBs(formatDateInput(e.target.value))}
+                        className="erp-input font-mono font-bold border-purple-300"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-extrabold text-purple-950 mb-1">
+                      Cheque Issued To / Payee Name (चेक कसको नाममा जारी गरियो - Account Holder)
+                    </label>
+                    <input
+                      type="text"
+                      value={editChequePayeeName}
+                      onChange={(e) => setEditChequePayeeName(e.target.value)}
+                      placeholder="Account Owner Name if different from Shop/Firm Name"
+                      className="erp-input font-bold border-purple-300"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Row 4: Bill No & Approved By */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Bill / Voucher Number (बिल/भौचर नं)
+                  </label>
+                  <input
+                    type="text"
+                    value={editBillNo}
+                    onChange={(e) => setEditBillNo(e.target.value)}
+                    placeholder="BILL-2083-042"
+                    className="erp-input font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Approved By (स्वीकृत गर्ने अधिकारी)
+                  </label>
+                  <select
+                    value={editApprovedByOption}
+                    onChange={(e) => setEditApprovedByOption(e.target.value)}
+                    className="erp-input font-bold mb-1"
+                  >
+                    <option value="Principal (प्रधानाध्यापक)">Principal (प्रधानाध्यापक)</option>
+                    <option value="SMC Chairperson (विद्यालय व्यवस्थापन समिति अध्यक्ष)">SMC Chairperson (वि.व्य.स. अध्यक्ष)</option>
+                    <option value="Accountant (लेखापाल)">Accountant (लेखापाल)</option>
+                    <option value="Vice Principal (सहायक प्र.अ.)">Vice Principal (सहायक प्र.अ.)</option>
+                    <option value="CUSTOM">Other Authority (अन्य लेख्नुहोस्)...</option>
+                  </select>
+                  {editApprovedByOption === 'CUSTOM' && (
+                    <input
+                      type="text"
+                      placeholder="Type Authority Name..."
+                      value={editCustomApprovedBy}
+                      onChange={(e) => setEditCustomApprovedBy(e.target.value)}
+                      className="erp-input"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Particulars & Remarks */}
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Description / Particulars (खर्चको विवरण)
+                </label>
+                <input
+                  type="text"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Details of expense..."
+                  className="erp-input"
+                />
+              </div>
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">Remarks (कैफियत)</label>
+                <textarea
+                  rows={2}
+                  value={editRemarks}
+                  onChange={(e) => setEditRemarks(e.target.value)}
+                  placeholder="Any extra remarks..."
+                  className="erp-input"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="rounded-xl border border-gray-200 px-4 py-2 font-semibold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateExpenseMutation.isPending}
+                  className="rounded-xl bg-blue-600 px-6 py-2 font-bold text-white hover:bg-blue-700 disabled:opacity-60 shadow-xs"
+                >
+                  {updateExpenseMutation.isPending ? 'Updating...' : 'Update Expense (अपडेट गर्नुहोस्)'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 6. ADD NEW EXPENSE TOPIC WITH CODE MODAL ───────────────────────── */}
+      {isAddHeadModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <h3 className="font-extrabold text-sm text-[#1e3a5f] flex items-center gap-1.5">
+                <Layers size={16} />
+                <span>Add Expense Topic with Code (नयाँ खर्च शीर्षक)</span>
+              </h3>
+              <button onClick={() => setIsAddHeadModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const catId = newHeadCategoryId ? parseInt(newHeadCategoryId) : categoriesData?.[0]?.id || 1;
+                if (!catId) {
+                  toast.error('कृपया खर्च वर्ग छनौट गर्नुहोस् (Please select an expense category).');
+                  return;
+                }
+                createExpenseHeadMutation.mutate({
+                  categoryId: catId,
+                  code: newHeadCode.trim() || undefined,
+                  name: newHeadName,
+                  nameNepali: newHeadNameNepali,
+                });
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">
+                  Expense Category (खर्च वर्ग/समूह) *
+                </label>
+                <select
+                  required
+                  value={newHeadCategoryId}
+                  onChange={(e) => setNewHeadCategoryId(e.target.value)}
+                  className="erp-input font-bold"
+                >
+                  <option value="">-- Select Expense Category --</option>
+                  {categoriesData?.map((cat: any) => (
+                    <option key={cat.id} value={cat.id.toString()}>
+                      {cat.name} {cat.nameNepali ? `(${cat.nameNepali})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-amber-700 mt-0.5 font-bold">
+                  ⚠️ सही खर्च वर्ग छनौट गर्नुहोस् (उदाहरण: शैक्षिक सामग्री, कार्यालय सञ्चालन, तलब, आदि)
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Accounting Code (खर्च कोड न.)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 20101, 20201, 30101"
+                  value={newHeadCode}
+                  onChange={(e) => setNewHeadCode(e.target.value)}
+                  className="erp-input font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Expense Topic Title (English) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Tour / Excursion, Stationery, Internet"
+                  value={newHeadName}
+                  onChange={(e) => setNewHeadName(e.target.value)}
+                  className="erp-input font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Nepali Title (नेपाली शीर्षक)</label>
+                <input
+                  type="text"
+                  placeholder="भ्रमण, स्टेसनरी, इन्टरनेट"
+                  value={newHeadNameNepali}
+                  onChange={(e) => setNewHeadNameNepali(e.target.value)}
+                  className="erp-input font-nepali font-bold"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+                <button type="button" onClick={() => setIsAddHeadModalOpen(false)} className="px-4 py-2 border rounded-xl font-bold">Cancel</button>
+                <button type="submit" disabled={createExpenseHeadMutation.isPending} className="px-5 py-2 bg-rose-600 text-white font-bold rounded-xl shadow-xs">
+                  {createExpenseHeadMutation.isPending ? 'Saving...' : 'Save Expense Topic (सेभ गर्नुहोस्)'}
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* ─── 7. ADD NEW PARTY / RECIPIENT MODAL ──────────────────────────────── */}
+      {isAddPartyModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <h3 className="font-extrabold text-sm text-[#1e3a5f] flex items-center gap-1.5">
+                <Users size={16} />
+                <span>Add Recipient / Party (पाउने व्यक्ति/संस्था)</span>
+              </h3>
+              <button onClick={() => setIsAddPartyModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const finalPartyType = newPartyType === 'CUSTOM' ? customPartyType : newPartyType;
+                createPartyMutation.mutate({
+                  name: newPartyName,
+                  nameNepali: newPartyNameNepali,
+                  partyType: finalPartyType || 'VENDOR',
+                  panNo: newPartyPan,
+                  phone: newPartyPhone,
+                });
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Party / Vendor Name (English) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Quality Stationers / Electrician Ram Kumar / Groceries Shop"
+                  value={newPartyName}
+                  onChange={(e) => setNewPartyName(e.target.value)}
+                  className="erp-input font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Nepali Name (नेपाली नाम)</label>
+                <input
+                  type="text"
+                  placeholder="क्वालिटी स्टेसनरी / राम इलेक्ट्रिसियन"
+                  value={newPartyNameNepali}
+                  onChange={(e) => setNewPartyNameNepali(e.target.value)}
+                  className="erp-input font-nepali font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Party Type (प्रकार)</label>
+                  <select
+                    value={newPartyType}
+                    onChange={(e) => setNewPartyType(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="VENDOR">VENDOR (विक्रेता / पसल)</option>
+                    <option value="SUPPLIER">SUPPLIER (सामग्री सप्लायर)</option>
+                    <option value="WORKER">WORKER (श्रमिक / कामदार / इलेक्ट्रिसियन / प्लम्बर)</option>
+                    <option value="SHOPKEEPER">SHOPKEEPER (पसले / खाद्यान्न / किराना / स्टेसनरी)</option>
+                    <option value="SERVICE_PROVIDER">SERVICE PROVIDER (सेवा प्रदायक - बिजुली / इन्टरनेट)</option>
+                    <option value="CONTRACTOR">CONTRACTOR (ठेकेदार / निर्माण कार्य)</option>
+                    <option value="DONOR">DONOR (चन्दादाता / दानवीर)</option>
+                    <option value="GOVT">GOVT (सरकारी निकाय / पालिका)</option>
+                    <option value="STAFF">STAFF / TEACHER (शिक्षक तथा कर्मचारी)</option>
+                    <option value="CUSTOM">OTHER (अन्य नयाँ प्रकार लेख्नुहोस्)...</option>
+                  </select>
+                  {newPartyType === 'CUSTOM' && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Type custom party type (e.g. Electrician, Groceries...)"
+                      value={customPartyType}
+                      onChange={(e) => setCustomPartyType(e.target.value)}
+                      className="erp-input mt-1 font-bold border-rose-400"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">PAN / VAT No.</label>
+                  <input
+                    type="text"
+                    placeholder="601234567"
+                    value={newPartyPan}
+                    onChange={(e) => setNewPartyPan(e.target.value)}
+                    className="erp-input font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Contact Phone</label>
+                <input
+                  type="text"
+                  placeholder="98XXXXXXXX"
+                  value={newPartyPhone}
+                  onChange={(e) => setNewPartyPhone(e.target.value)}
+                  className="erp-input font-mono"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+                <button type="button" onClick={() => setIsAddPartyModalOpen(false)} className="px-4 py-2 border rounded-xl font-bold">Cancel</button>
+                <button type="submit" disabled={createPartyMutation.isPending} className="px-5 py-2 bg-rose-600 text-white font-bold rounded-xl shadow-xs">
+                  {createPartyMutation.isPending ? 'Saving...' : 'Save Party (सेभ गर्नुहोस्)'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 8. PARTY-WISE VOUCHERS INSPECTOR MODAL ──────────────────────────── */}
+      {inspectPartyId && partyVouchersData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+          <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-[#1e3a5f] flex items-center gap-2">
+                  <Building size={18} className="text-rose-600" />
+                  <span>Party Ledger: {partyVouchersData.party?.name}</span>
+                </h3>
+                <p className="text-[11px] text-gray-500 font-nepali mt-0.5">
+                  PAN: {partyVouchersData.party?.panNo || 'N/A'} • Phone: {partyVouchersData.party?.phone || 'N/A'} • Type: {partyVouchersData.party?.partyType}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => triggerFullPartyLedgerPrint(partyVouchersData)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#1e3a5f] text-white hover:bg-[#2a5280] px-3.5 py-1.5 text-xs font-bold transition shadow-2xs"
+                >
+                  <Printer size={13} />
+                  <span>Print Full Party Ledger Report (लेखा पाना प्रिन्ट)</span>
+                </button>
+                <button onClick={() => setInspectPartyId(null)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+              <div>
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Total Vouchers Paid</span>
+                <p className="text-base font-extrabold text-[#1e3a5f]">{partyVouchersData.totalVoucherCount}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Total Expense Amount</span>
+                <p className="text-base font-extrabold text-rose-700 font-mono">रू {(partyVouchersData.totalExpenseSum || 0).toLocaleString()}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-gray-500 uppercase">Net Party Ledger Balance</span>
+                <p className="text-base font-extrabold text-emerald-700 font-mono">
+                  रू {((partyVouchersData.totalExpenseSum || 0) - (partyVouchersData.totalIncomeSum || 0)).toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-extrabold text-[#1e3a5f] uppercase tracking-wider text-[11px]">Expense Vouchers Issued to this Party</h4>
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-left font-sans">
+                  <thead className="bg-[#1e3a5f] text-white text-[10px] uppercase font-bold">
+                    <tr>
+                      <th className="py-2.5 px-3">Date (BS)</th>
+                      <th className="py-2.5 px-3">Voucher No</th>
+                      <th className="py-2.5 px-3">Expense Head</th>
+                      <th className="py-2.5 px-3">Method & Cheque</th>
+                      <th className="py-2.5 px-3 text-right">Amount (रू)</th>
+                      <th className="py-2.5 px-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-gray-700">
+                    {partyVouchersData.expenses?.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-gray-400">No expense vouchers recorded for this party yet.</td>
+                      </tr>
+                    ) : (
+                      partyVouchersData.expenses?.map((e: any) => (
+                        <tr key={e.id} className="hover:bg-slate-50">
+                          <td className="py-2 px-3 font-mono font-bold">{e.expenseDateBs}</td>
+                          <td className="py-2 px-3 font-mono font-bold text-[#1e3a5f]">{e.voucherNo || `VOUCH-${e.id}`}</td>
+                          <td className="py-2 px-3 font-bold">{e.head?.name}</td>
+                          <td className="py-2 px-3 font-mono">
+                            {e.paymentMedium} {e.chequeNo ? `(Chk: ${e.chequeNo})` : ''}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-black text-rose-700">
+                            रू ${(e.amount || 0).toLocaleString()}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            <button
+                              onClick={() => triggerSingleVoucherPrint({ ...e, party: partyVouchersData.party })}
+                              className="inline-flex items-center gap-1 rounded bg-amber-400 hover:bg-amber-300 text-[#1e3a5f] px-2 py-0.5 text-[10px] font-extrabold shadow-2xs transition"
+                              title="Print Single Official Journal Voucher"
+                            >
+                              <Printer size={10} />
+                              <span>Print JV</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setInspectPartyId(null)}
+                className="rounded-xl border border-gray-200 px-5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── 9. EDIT PAYABLE BILL MODAL ─────────────────────────────────────── */}
+      {editingPayableBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                  <Edit2 size={16} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-[#1e3a5f]">
+                    Edit Payable Bill Details (बिल तथा हिसाब सम्पादन)
+                  </h3>
+                  <p className="text-[11px] text-gray-400 font-mono">
+                    Bill No: <strong className="text-blue-900">{editingPayableBill.billNo}</strong> | Total Paid: Rs. {editingPayableBill.totalPaidAmount.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setEditingPayableBill(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditPayable} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Bill / Invoice No (बिल नं.) *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={editPayBillNo}
+                    onChange={(e) => setEditPayBillNo(e.target.value)}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Bill Date BS (मिति) *
+                  </label>
+                  <input
+                    required
+                    type="text"
+                    value={editPayBillDateBs}
+                    onChange={(e) => setEditPayBillDateBs(formatDateInput(e.target.value))}
+                    className="erp-input font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Vendor / Party (पाउने व्यक्ति/संस्था)
+                  </label>
+                  <select
+                    value={editPayBillPartyId}
+                    onChange={(e) => setEditPayBillPartyId(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="">-- Select Party / Vendor --</option>
+                    {partiesData?.map((p: any) => (
+                      <option key={p.id} value={p.id.toString()}>
+                        {p.name} {p.panNo ? `(PAN: ${p.panNo})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-extrabold text-gray-800 mb-1">
+                    Expense Head / Topic (खर्च शीर्षक)
+                  </label>
+                  <select
+                    value={editPayBillHeadId}
+                    onChange={(e) => setEditPayBillHeadId(e.target.value)}
+                    className="erp-input font-bold"
+                  >
+                    <option value="">-- Select Expense Topic --</option>
+                    {headsData?.map((h: any) => (
+                      <option key={h.id} value={h.id.toString()}>
+                        {h.code ? `[${h.code}] ` : ''}{h.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Total Bill Amount in रू (कुल बिल रकम) *
+                </label>
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  value={editPayBillTotalAmount}
+                  onChange={(e) => setEditPayBillTotalAmount(e.target.value)}
+                  className="erp-input font-mono font-extrabold text-purple-900"
+                />
+                <p className="text-[10px] text-gray-500 mt-0.5">
+                  Currently paid: <strong className="text-emerald-700 font-mono">Rs. {editingPayableBill.totalPaidAmount.toLocaleString()}</strong> |
+                  Calculated Due: <strong className="text-rose-700 font-mono">Rs. {Math.max(0, (parseFloat(editPayBillTotalAmount || '0') - editingPayableBill.totalPaidAmount)).toLocaleString()}</strong>
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-extrabold text-gray-800 mb-1">
+                  Description / Particulars (विवरण)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editPayBillDescription}
+                  onChange={(e) => setEditPayBillDescription(e.target.value)}
+                  placeholder="Purchase of furniture, stationery, or equipment..."
+                  className="erp-input text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingPayableBill(null)}
+                  className="rounded-xl border border-gray-200 px-4 py-2 font-bold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel (रद्द)
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2 font-bold text-white shadow-xs transition"
+                >
+                  Save Bill Changes (परिवर्तन सुरक्षित)
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
