@@ -33,6 +33,7 @@ logs/
 # Database temporary files
 *.db-journal
 BACKUP/
+backend/sqlite_dump.json
 
 # Uploads & Temp files
 backend/uploads/*

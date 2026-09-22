@@ -16,7 +16,10 @@ const app = express();
 
 // ── MIDDLEWARE ─────────────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: process.env.FRONTEND_URL || '*', credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => callback(null, true),
+  credentials: true,
+}));
 app.use(compression());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -28,7 +31,9 @@ if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 app.use('/uploads', express.static(path.resolve(uploadDir)));
 
 // ── ROUTES ─────────────────────────────────────────────────────────────────
-app.use('/api/auth',       require('./routes/auth'));
+const authRouter = require('./routes/auth');
+app.use('/api/auth',       authRouter);
+app.use('/auth',           authRouter);
 app.use('/api/school',     require('./routes/school'));
 app.use('/api/students',   require('./routes/students'));
 app.use('/api/teachers',   require('./routes/teachers'));
