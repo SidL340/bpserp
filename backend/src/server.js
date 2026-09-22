@@ -1,4 +1,9 @@
 require('dotenv').config();
+
+if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim() === '') {
+  process.env.DATABASE_URL = 'file:./prisma/dev.db';
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -43,7 +48,22 @@ app.use('/api/financial-years', require('./routes/financialYears').router);
 app.use('/api/public',         require('./routes/public'));
 app.use('/api/admissions',     require('./routes/admissions'));
 
-// ── HEALTH CHECK ─────────────────────────────────────────────────────────────
+// ── ROOT & HEALTH CHECK ─────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ONLINE',
+    service: 'BPS School ERP API Server',
+    school: 'Brindawan Public School',
+    health: '/api/health',
+    endpoints: '/api/public/site',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api', (req, res) => {
+  res.json({ status: 'OK', message: 'BPS School ERP API Gateway' });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString(), service: 'BPS School ERP API' });
 });
