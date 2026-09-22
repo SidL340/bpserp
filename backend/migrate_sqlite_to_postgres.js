@@ -1,8 +1,15 @@
 const { PrismaClient } = require('@prisma/client');
 const path = require('path');
 
-const sqliteUrl = 'file:./dev.db';
-const postgresUrl = 'postgresql://nepal_mavi_db_user:kaRpJ9iUEbtw6n5kTvCaACfhIDzMo4FD@dpg-dab91h2d0e5s73do56s0-a.singapore-postgres.render.com/nepal_mavi_db?sslmode=require';
+const sqliteUrl = process.env.SQLITE_URL || 'file:./prisma/dev.db';
+const postgresUrl = process.env.TARGET_POSTGRES_URL || process.argv[2];
+
+if (!postgresUrl) {
+  console.error('❌ Error: Please provide a target PostgreSQL URL:');
+  console.error('   Usage: node migrate_sqlite_to_postgres.js "postgresql://user:pass@host:5432/dbname"');
+  console.error('   Or set TARGET_POSTGRES_URL in your environment.');
+  process.exit(1);
+}
 
 // Create SQLite Prisma Client
 const sqlitePrisma = new PrismaClient({
