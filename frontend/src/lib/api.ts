@@ -1,23 +1,14 @@
 import axios from 'axios';
 
+const PRODUCTION_API = 'https://bpserp.onrender.com/api';
+
 const getBaseUrl = () => {
-  // If explicitly provided via environment variable
+  // If explicitly provided via environment variable as a full URL
   if (process.env.NEXT_PUBLIC_API_URL) {
-    let url = process.env.NEXT_PUBLIC_API_URL.trim();
-    // Strip trailing slashes
-    url = url.replace(/\/+$/, '');
-    // If it is just a path like "/api", return as-is
-    if (url.startsWith('/') && url.length > 1) {
-      return url;
-    }
-    // If it's a full URL and doesn't end with /api, append /api
+    const url = process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, '');
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      if (!url.endsWith('/api')) {
-        url = `${url}/api`;
-      }
-      return url;
+      return url.endsWith('/api') ? url : `${url}/api`;
     }
-    return url;
   }
 
   // Local development fallback
@@ -28,8 +19,8 @@ const getBaseUrl = () => {
     }
   }
 
-  // Production fallback if NEXT_PUBLIC_API_URL was not set in Vercel
-  return 'https://bpserp.onrender.com/api';
+  // Production fallback
+  return PRODUCTION_API;
 };
 
 const api = axios.create({
